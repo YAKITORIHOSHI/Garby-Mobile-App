@@ -82,6 +82,19 @@ backdrop blur and continuous decorative animations are removed on every device, 
 mid-range phones; no off-screen Haze source or blur layers are allocated. Dialogs use thick
 smoked glass over the system dim. Status colours always come with an icon or a word.
 
+Category dividers combine a stable icon/accent, a concise description and an independent
+status summary. `ui/DashboardIndicators.kt` derives summaries from fresh, valid readings and
+the same levels used by the system tiles. Positive sensor counts require cloud and phone
+connectivity plus valid timestamps; current gas warnings remain visible if another sensor
+is missing. These summaries only describe telemetry and never affect robot control or the
+return gate. Headings merge their accessible descriptions, and status capsules wrap below
+the title when needed. Metric-card status has its own row, avoiding competition with the icon
+on narrow cards. All new decoration is static.
+
+The adaptive metric grid scales its minimum card width with the user's font scale. Larger
+text therefore selects fewer columns instead of squeezing the readings and units. Cards
+share a 264 dp minimum height at the default font size; explanatory update text can wrap.
+
 Large bitmaps live in `res/drawable-nodpi` so they are not density-scaled at decode (the old
 `drawable/` placement turned the 2000 px logo into an ~80 MB bitmap on a 420 dpi phone). The
 launcher icon is adaptive with a themed (monochrome) layer; the original 2000 px logo is kept as

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -63,6 +64,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.thesis.garby.R
@@ -483,20 +485,26 @@ fun StatusPill(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .clip(GlassShapes.Pill)
-            .background(color.copy(alpha = 0.16f))
-            .border(1.dp, color.copy(alpha = 0.5f), GlassShapes.Pill)
-            .padding(horizontal = 10.dp, vertical = 5.dp)
+            .background(color.copy(alpha = 0.10f))
+            .border(1.dp, color.copy(alpha = 0.28f), GlassShapes.Pill)
+            .padding(horizontal = 9.dp, vertical = 4.dp)
     ) {
         if (icon != null) {
             Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
         } else {
-            StatusDot(color = color)
+            Box(
+                modifier = Modifier.size(12.dp).background(color.copy(alpha = 0.18f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                StatusDot(color = color, size = 6.dp)
+            }
         }
         Spacer(Modifier.width(6.dp))
         Text(
             text = text,
             style = MaterialTheme.typography.labelMedium,
-            color = GarbyColors.TextPrimary,
+            color = color,
+            letterSpacing = 0.1.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -513,33 +521,69 @@ fun StatusDot(color: Color, modifier: Modifier = Modifier, size: Dp = 8.dp) {
     )
 }
 
-/** Section title for the dashboard grid. */
+/** A category divider with a stable category accent and a separate, labelled live indicator. */
 @Composable
 fun SectionHeader(
     title: String,
+    icon: ImageVector,
+    accent: Color,
     modifier: Modifier = Modifier,
     caption: String? = null,
     trailing: (@Composable () -> Unit)? = null
 ) {
-    Column(modifier.padding(top = 12.dp, start = 4.dp, end = 4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = title.uppercase(),
-                style = MaterialTheme.typography.labelLarge,
-                color = GarbyColors.TextSecondary,
-                modifier = Modifier
-                    .weight(1f)
-                    .semantics { heading() }
-            )
-            trailing?.invoke()
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 14.dp, bottom = 2.dp)
+            .clip(shape)
+            .background(GarbyColors.NightRaised.copy(alpha = 0.96f))
+            .background(Brush.horizontalGradient(listOf(accent.copy(alpha = 0.09f), Color.Transparent)))
+            .border(1.dp, GarbyColors.GlassStrokeFaint, shape)
+            .drawWithCache {
+                val rule = Brush.horizontalGradient(
+                    listOf(accent.copy(alpha = 0.65f), accent.copy(alpha = 0.12f), Color.Transparent)
+                )
+                onDrawBehind {
+                    drawLine(rule, Offset(18.dp.toPx(), size.height), Offset(size.width, size.height), 2.dp.toPx())
+                }
+            }
+            .semantics(mergeDescendants = true) { heading() }
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // The status can use the full width when larger text moves it to the next line.
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.align(Alignment.CenterVertically)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .background(accent.copy(alpha = 0.10f), RoundedCornerShape(12.dp))
+                        .border(1.dp, accent.copy(alpha = 0.24f), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = GarbyColors.TextPrimary
+                )
+            }
+            if (trailing != null) {
+                Box(Modifier.align(Alignment.CenterVertically)) { trailing() }
+            }
         }
         if (caption != null) {
-            Text(
-                text = caption,
-                style = MaterialTheme.typography.bodySmall,
-                color = GarbyColors.TextMuted,
-                modifier = Modifier.padding(top = 2.dp)
-            )
+            Text(caption, style = MaterialTheme.typography.bodySmall, color = GarbyColors.TextMuted)
         }
     }
 }

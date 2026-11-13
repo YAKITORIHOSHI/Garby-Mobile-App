@@ -1,5 +1,25 @@
 # GARBY Mobile App - Patch Notes
 
+## Most Latest
+
+2026-11-14 — Dashboard categories and indicators.
+
+- Bin, Air and System now have inset category dividers with distinct icons, subtle accent
+  rules, concise descriptions and summaries of the readings below them.
+- Live counts, gas bands, dispatch weight and system issues use words and icons as well as
+  colour. Missing, invalid, stale or disconnected telemetry cannot produce an all-clear.
+- Metric cards give their status a separate row so longer labels fit narrow cards. Stale
+  sensors use neutral icon accents and a clock indicator. System tiles use status symbols.
+- Larger system text selects fewer grid columns, metric cards share a consistent minimum
+  height, and explanatory update text wraps instead of being cut off.
+- Status capsules use quieter borders, tinted text and static dot halos. Category titles
+  remain accessible headings, and their status wraps when space or font size requires it.
+- The app's displayed version name and this release title are **Most Latest**. Android keeps
+  a numeric build code internally for upgrade ordering.
+- Verification: 53 unit tests, lint with no issues, static checks and debug/release/optimized
+  builds. Headless Compose layouts cover 320–400 dp widths and text scales up to 200%.
+- **MCU upload: None; Pi deployment: None.** Only the Android app changes.
+
 ## 2026-11-14 Device-wide rendering and memory performance (2.0.1)
 
 - Removed live blur/Haze layers and continuous decorative animations on every device, including

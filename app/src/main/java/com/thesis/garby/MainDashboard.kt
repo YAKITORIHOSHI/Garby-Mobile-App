@@ -25,15 +25,22 @@ import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.Air
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.HourglassTop
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.Radar
 import androidx.compose.material.icons.rounded.Scale
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Science
 import androidx.compose.material.icons.rounded.Sensors
 import androidx.compose.material.icons.rounded.Straighten
 import androidx.compose.material.icons.rounded.Thermostat
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material.icons.rounded.WifiOff
@@ -51,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -80,6 +88,7 @@ import com.thesis.garby.realtime.RobotPresence
 import com.thesis.garby.realtime.RobotState
 import com.thesis.garby.realtime.SensorReading
 import com.thesis.garby.realtime.SensorReadingUiState
+import com.thesis.garby.realtime.Severity
 import com.thesis.garby.realtime.decodeThrottleFlags
 import com.thesis.garby.realtime.gasBand
 import com.thesis.garby.realtime.gasMatchesDangerRule
@@ -87,6 +96,10 @@ import com.thesis.garby.realtime.linkLevel
 import com.thesis.garby.realtime.loadLevel
 import com.thesis.garby.realtime.piPowerLevel
 import com.thesis.garby.realtime.piTemperatureLevel
+import com.thesis.garby.ui.SectionIndicator
+import com.thesis.garby.ui.SectionIndicatorKind
+import com.thesis.garby.ui.airSectionIndicator
+import com.thesis.garby.ui.binSectionIndicator
 import com.thesis.garby.ui.formatAgo
 import com.thesis.garby.ui.formatDecimal
 import com.thesis.garby.ui.formatTimeOfDay
@@ -114,6 +127,7 @@ import com.thesis.garby.ui.healthColor
 import com.thesis.garby.ui.returnStageUi
 import com.thesis.garby.ui.robotStateUi
 import com.thesis.garby.ui.severityColor
+import com.thesis.garby.ui.systemSectionIndicator
 import com.thesis.garby.ui.theme.GarbyColors
 import com.thesis.garby.ui.theme.GarbyTheme
 import java.util.Locale
@@ -161,6 +175,7 @@ fun DashboardContent(
     onSignOut: () -> Unit
 ) {
     val robotState = state.device.status?.robotState
+    val systemTiles = healthTiles(state)
     val (subtitle, subtitleColor) = cloudSubtitle(state)
     GlassScaffold(
         topBar = {
@@ -185,8 +200,9 @@ fun DashboardContent(
         }
     ) { padding ->
         val layoutDirection = LocalLayoutDirection.current
+        val cardScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 168.dp),
+            columns = GridCells.Adaptive(minSize = 168.dp * cardScale),
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = padding.calculateStartPadding(layoutDirection) + 16.dp,
@@ -205,15 +221,23 @@ fun DashboardContent(
             fullWidth("bin-header", contentType = "section-header") {
                 SectionHeader(
                     title = "Bin",
-                    caption = "GARBY leaves for the collection point by itself at 4.0 kg, or after " +
-                        "three dangerous gas readings, while idle at base."
+                    icon = Icons.Rounded.DeleteOutline,
+                    accent = GarbyColors.Rose,
+                    caption = "Weight and distance · 4\u00A0kg trigger",
+                    trailing = { SectionStatus(binSectionIndicator(state)) }
                 )
             }
             item(key = "weight", contentType = "weight") { WeightCard(state.weight, robotState, state.nowMs) }
             item(key = "level", contentType = "bin-distance") { BinDistanceCard(state.level, state.nowMs) }
 
             fullWidth("air-header", contentType = "section-header") {
-                SectionHeader(title = "Air", caption = "Bands follow the robot's own gas thresholds.")
+                SectionHeader(
+                    title = "Air",
+                    icon = Icons.Rounded.Air,
+                    accent = GarbyColors.Info,
+                    caption = "Three gas sensors · Threshold bands",
+                    trailing = { SectionStatus(airSectionIndicator(state)) }
+                )
             }
             item(key = "mq135", contentType = "gas") { GasCard(GasSensor.Mq135, state.mq135, state.nowMs) }
             item(key = "mq137", contentType = "gas") { GasCard(GasSensor.Mq137, state.mq137, state.nowMs) }
@@ -221,9 +245,15 @@ fun DashboardContent(
             item(key = "gas-rule", contentType = "gas-rule") { GasRuleCard(state) }
 
             fullWidth("system-header", contentType = "section-header") {
-                SectionHeader(title = "System", caption = "Reported by GARBY's Raspberry Pi every 30 s.")
+                SectionHeader(
+                    title = "System",
+                    icon = Icons.Rounded.Tune,
+                    accent = GarbyColors.Neutral,
+                    caption = "Connections · Pi health · 30\u00A0s updates",
+                    trailing = { SectionStatus(systemSectionIndicator(systemTiles.map { it.level })) }
+                )
             }
-            healthTiles(state).forEach { tile ->
+            systemTiles.forEach { tile ->
                 item(key = "health-${tile.title}", contentType = "health") { HealthTile(tile) }
             }
 
@@ -234,6 +264,23 @@ fun DashboardContent(
 
 private fun LazyGridScope.fullWidth(key: String, contentType: String = key, content: @Composable () -> Unit) {
     item(key = key, contentType = contentType, span = { GridItemSpan(maxLineSpan) }) { content() }
+}
+
+@Composable
+private fun SectionStatus(indicator: SectionIndicator) {
+    val color = indicator.severity?.let(::severityColor) ?: GarbyColors.Neutral
+    val icon = when (indicator.severity) {
+        Severity.Normal -> Icons.Rounded.CheckCircle
+        Severity.Elevated -> Icons.Rounded.Info
+        Severity.High, Severity.Danger -> Icons.Rounded.Warning
+        null -> when (indicator.kind) {
+            SectionIndicatorKind.Loading -> Icons.Rounded.HourglassTop
+            SectionIndicatorKind.Stale -> Icons.Rounded.Schedule
+            SectionIndicatorKind.Unavailable -> Icons.Rounded.ErrorOutline
+            SectionIndicatorKind.Summary -> Icons.Rounded.Info
+        }
+    }
+    StatusPill(indicator.label, color, icon = icon)
 }
 
 private fun cloudSubtitle(state: DeviceUiState): Pair<String, Color> = when {
@@ -485,21 +532,24 @@ private fun MetricCard(
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconOrb(icon, accent, size = 36.dp)
-                Spacer(Modifier.weight(1f))
-                pill()
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                IconOrb(icon, accent, size = 28.dp)
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = GarbyColors.TextSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
             }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = title.uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                color = GarbyColors.TextMuted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(10.dp))
             content()
+            Spacer(Modifier.height(12.dp))
+            pill()
         }
         Column(Modifier.padding(top = 10.dp)) {
             Text(
@@ -514,8 +564,6 @@ private fun MetricCard(
                     text = updated,
                     style = MaterialTheme.typography.labelSmall,
                     color = GarbyColors.TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
@@ -523,7 +571,7 @@ private fun MetricCard(
     }
 }
 
-private val METRIC_CARD_MIN_HEIGHT = 224.dp
+private val METRIC_CARD_MIN_HEIGHT = 264.dp
 
 @Composable
 private fun ValueLine(value: String, unit: String) {
@@ -546,7 +594,7 @@ private fun UnavailableCard(icon: ImageVector, title: String, message: String) {
         icon = icon,
         title = title,
         accent = GarbyColors.Neutral,
-        pill = { StatusPill("No data", GarbyColors.Neutral) },
+        pill = { StatusPill("No data", GarbyColors.Neutral, icon = Icons.Rounded.ErrorOutline) },
         footnote = message
     ) {
         Text("—", style = MaterialTheme.typography.headlineMedium, color = GarbyColors.TextMuted)
@@ -581,7 +629,7 @@ private fun WeightCard(state: SensorReadingUiState, robotState: RobotState?, now
             MetricCard(
                 icon = Icons.Rounded.Scale,
                 title = title,
-                accent = color,
+                accent = if (state.isStale) GarbyColors.Neutral else color,
                 pill = { FreshnessPill(state.isStale, label, color) },
                 footnote = if (idle || !state.isStale) {
                     "Starts a run at ${formatDecimal(ExecutorThresholds.LOAD_TRIGGER_KG, 1, locale)} kg."
@@ -623,7 +671,7 @@ private fun BinDistanceCard(state: SensorReadingUiState, nowMs: Long) {
             MetricCard(
                 icon = Icons.Rounded.Straighten,
                 title = title,
-                accent = GarbyColors.Info,
+                accent = if (state.isStale) GarbyColors.Neutral else GarbyColors.Info,
                 pill = { FreshnessPill(state.isStale, "Live", GarbyColors.Info) },
                 footnote = "Ultrasonic reading from the bin sensor board.",
                 updated = updatedText(reading, nowMs)
@@ -658,7 +706,7 @@ private fun GasCard(sensor: GasSensor, state: SensorReadingUiState, nowMs: Long)
             MetricCard(
                 icon = icon,
                 title = title,
-                accent = color,
+                accent = if (state.isStale) GarbyColors.Neutral else color,
                 pill = { FreshnessPill(state.isStale, band?.label ?: "Unknown", color) },
                 footnote = gasThresholdText(sensor),
                 updated = updatedText(reading, nowMs)
@@ -719,7 +767,11 @@ private fun GasRuleCard(state: DeviceUiState) {
 
 @Composable
 private fun FreshnessPill(stale: Boolean, label: String, color: Color) {
-    if (stale) StatusPill("Stale", GarbyColors.Neutral) else StatusPill(label, color)
+    if (stale) {
+        StatusPill("Stale", GarbyColors.Neutral, icon = Icons.Rounded.Schedule)
+    } else {
+        StatusPill(label, color)
+    }
 }
 
 private data class HealthTileUi(
@@ -804,7 +856,17 @@ private fun HealthTile(tile: HealthTileUi) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconOrb(tile.icon, color, size = 32.dp)
             Spacer(Modifier.weight(1f))
-            StatusDot(color, size = 10.dp)
+            Icon(
+                imageVector = when (tile.level) {
+                    HealthLevel.Ok -> Icons.Rounded.CheckCircle
+                    HealthLevel.Caution -> Icons.Rounded.Info
+                    HealthLevel.Fault -> Icons.Rounded.ErrorOutline
+                    HealthLevel.Unknown -> Icons.Rounded.Schedule
+                },
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(18.dp)
+            )
         }
         Spacer(Modifier.height(10.dp))
         Text(tile.title, style = MaterialTheme.typography.labelMedium, color = GarbyColors.TextMuted, maxLines = 1)
