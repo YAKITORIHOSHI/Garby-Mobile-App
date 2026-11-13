@@ -25,6 +25,9 @@ Pi monitor's emergency stop always decide whether it moves.
 - **Notifications:** receives GARBY push messages when a sender is configured (none is
   deployed yet).
 
+The app opens fullscreen, with Android's status and navigation bars hidden. Swipe inward
+from a screen edge to reveal the system controls temporarily.
+
 ## Requirements
 
 - Android 8.0 (API 26) or newer. All devices use smoked glass without live blur or continuous
@@ -52,6 +55,11 @@ Outputs are in `app/build/outputs/apk/`. If this checkout is on a network share,
 The `benchmark` APK uses the local development signing key, runs without debug instrumentation,
 and is intended for phone performance checks. Installing it replaces the same app and preserves
 its data when the existing signing key matches; it is not a production-signed release.
+
+For normal use and performance measurements, install the optimized **Most Latest** APK or
+select the `benchmark` build variant in Android Studio. The `debug` variant includes Compose
+instrumentation and can scroll substantially more slowly; pressing Run with that variant
+replaces the optimized installation with a debug build.
 
 `python -B tools/static_quality_check.py` checks the app's security and safety rules without an
 Android SDK. In the coordinated robot workspace, its root `tools/verify_project.py` also runs

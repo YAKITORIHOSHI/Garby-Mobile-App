@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.thesis.garby.network.NetworkConnectivityManager
+import com.thesis.garby.performance.GarbyDispatchers
 import com.thesis.garby.realtime.ConnectionState
 import com.thesis.garby.realtime.DeviceStatus
 import com.thesis.garby.realtime.GarbyRealtimeDb
@@ -25,10 +26,12 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 
 /** Result of the last submission attempt, shown until dismissed or replaced. */
@@ -158,7 +161,9 @@ class ReturnViewModel(private val savedState: SavedStateHandle) : ViewModel() {
             nowMs = now,
             serverNowMs = serverNow
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), ReturnUiState())
+    }
+        .flowOn(GarbyDispatchers.background)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), ReturnUiState())
 
     val summary: StateFlow<ReturnSummary> = uiState
         .map { ReturnSummary(it.progress, it.readiness.canSend) }
@@ -186,7 +191,11 @@ class ReturnViewModel(private val savedState: SavedStateHandle) : ViewModel() {
         notice.value = null
         viewModelScope.launch {
             try {
-                when (val result = GarbyRealtimeDb.requestReturn(deviceId = deviceId, requestedBy = uid)) {
+                val result = withContext(GarbyDispatchers.background) {
+                    GarbyRealtimeDb.requestReturn(deviceId = deviceId, requestedBy = uid)
+                }
+                // SavedStateHandle and visible submission state stay on the main dispatcher.
+                when (result) {
                     is ReturnSubmission.Sent -> {
                         savedState[KEY_TRACKED_AT] = result.request.requestedAtMs
                         savedState[KEY_TRACKED_BY] = result.request.requestedBy

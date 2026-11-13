@@ -77,6 +77,18 @@ Listeners attach only while a screen is visible (`repeatOnLifecycle`, `WhileSubs
 
 ## Glass design
 
+The activity and confirmation dialogs use immersive fullscreen: Android status/navigation
+bars are hidden using the shared `ui/Fullscreen.kt` window policy. An edge swipe reveals
+transient system controls; focus restoration reapplies the policy. Compose dialogs own a
+separate window and a disposable focus listener. Insets still protect display cutouts;
+hidden bars no longer reserve the normal status/navigation space.
+
+Launcher foreground is a vector traced from the retained official GARBY wordmark/cart,
+centered inside the 66 dp adaptive safe circle. The print-only ring and tagline are omitted
+for small-size legibility. The themed foreground uses the same silhouette. Regenerate the
+vector from `design/garby_logo_source_2000x1467.webp` with
+`design/generate_launcher_mark.py` (Python + Pillow); the original artwork is unchanged.
+
 Every screen uses cached marble artwork, smoked fills, a subtle sheen and glass borders. Live
 backdrop blur and continuous decorative animations are removed on every device, including
 mid-range phones; no off-screen Haze source or blur layers are allocated. Dialogs use thick
@@ -124,6 +136,12 @@ byte-bounded (4 MiB reduced, 16 MiB otherwise), serialized against duplicate dec
 on memory pressure/background trim. Active images are never forcibly recycled. With the current
 artwork the sampled images use approximately one quarter of the original decoded pixel memory.
 The control write, server readiness re-read and freshness deadlines are unchanged.
+
+The return ViewModel also moves its clock-driven readiness/progress combination upstream of
+`flowOn(GarbyDispatchers.background)`. Return submission performs server queries/response
+decoding on that same bounded dispatcher, then updates `SavedStateHandle` and visible
+submission state on the main dispatcher. All Firebase Tasks still suspend; no worker blocks
+on network I/O and no new thread pool or timing gate is added.
 
 Device observations and verification are described in `docs/2026-11-14-low-end-performance.md`.
 Raw evidence remains in the coordinated workspace's `artifacts/android-low-end-2026-11-14/`.

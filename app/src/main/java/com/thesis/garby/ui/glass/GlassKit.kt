@@ -1,5 +1,6 @@
 package com.thesis.garby.ui.glass
 
+import android.view.ViewTreeObserver
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -41,6 +42,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -57,6 +59,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -67,9 +70,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import com.thesis.garby.R
 import com.thesis.garby.performance.LocalPerformanceProfile
 import com.thesis.garby.ui.rememberResourceBitmap
+import com.thesis.garby.ui.hideSystemBars
 import com.thesis.garby.ui.theme.GarbyColors
 
 object GlassShapes {
@@ -598,15 +603,30 @@ fun GlassDialog(
 ) {
     Dialog(
         onDismissRequest = onDismissRequest,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
+        // Dialogs own a separate window; apply the same policy while a confirmation is open.
+        val dialogView = LocalView.current
+        DisposableEffect(dialogView) {
+            val dialogWindow = (dialogView.parent as? DialogWindowProvider)?.window
+            val observer = dialogView.viewTreeObserver
+            val listener = ViewTreeObserver.OnWindowFocusChangeListener { focused ->
+                if (focused) dialogWindow?.hideSystemBars()
+            }
+            dialogWindow?.hideSystemBars()
+            observer.addOnWindowFocusChangeListener(listener)
+            onDispose {
+                if (observer.isAlive) observer.removeOnWindowFocusChangeListener(listener)
+            }
+        }
         GlassPanel(
             tier = GlassTier.Thick,
             shape = GlassShapes.Hero,
             glow = GarbyColors.Ember,
             contentPadding = PaddingValues(24.dp),
             modifier = Modifier
-                .padding(horizontal = 24.dp)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(24.dp)
                 .fillMaxWidth()
                 .widthCap(),
             content = content

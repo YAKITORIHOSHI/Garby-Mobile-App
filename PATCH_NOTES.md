@@ -2,8 +2,14 @@
 
 ## Most Latest
 
-2026-11-14 — Dashboard categories and indicators.
+2026-11-14 — Dashboard categories, indicators and fullscreen experience.
 
+- Android's status and navigation bars are hidden on all app screens and confirmation
+  dialogs. Swipe from an edge to reveal system controls temporarily; immersive mode is
+  restored when the app or dialog regains focus. Cutout padding remains respected.
+- Replaced the padded bitmap launcher foreground with a centered vector traced from the
+  official GARBY wordmark and cart. Round, rounded-square and themed icons share the same
+  recognizable mark inside Android's safe area, without the print-only ring and tiny tagline.
 - Bin, Air and System now have inset category dividers with distinct icons, subtle accent
   rules, concise descriptions and summaries of the readings below them.
 - Live counts, gas bands, dispatch weight and system issues use words and icons as well as
@@ -16,9 +22,20 @@
   remain accessible headings, and their status wraps when space or font size requires it.
 - The app's displayed version name and this release title are **Most Latest**. Android keeps
   a numeric build code internally for upgrade ordering.
+- Audited Firebase subscriptions and background work. Return-state calculations and server
+  response handling now use the existing bounded background dispatcher; saved request state
+  stays on the main thread. Database paths, readiness gates and robot commands are unchanged.
 - Verification: 53 unit tests, lint with no issues, static checks and debug/release/optimized
   builds. Headless Compose layouts cover 320–400 dp widths and text scales up to 200%.
+- Installed and checked the exact optimized APK on the authorized test phone. In a fixed
+  scroll comparison against its debug installation, janky frames fell from 57.1% to 20.0%,
+  P90 frame time from 81 to 36 ms, and PSS from 153.3 to 61.1 MiB. This includes the build-type
+  change; some jank remains and only one phone was measured. Fullscreen/dialog/resume and
+  blocked return-screen navigation passed without sending a robot command.
 - **MCU upload: None; Pi deployment: None.** Only the Android app changes.
+
+Fullscreen, icon and runtime implementation/verification are recorded in
+[the fullscreen report](docs/2026-11-14-fullscreen.md).
 
 ## 2026-11-14 Device-wide rendering and memory performance (2.0.1)
 

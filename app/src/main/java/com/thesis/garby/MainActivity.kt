@@ -37,6 +37,7 @@ import com.thesis.garby.firestore.AuthState
 import com.thesis.garby.firestore.AuthViewModel
 import com.thesis.garby.notifications.GarbyNotificationHelper
 import com.thesis.garby.performance.LocalPerformanceProfile
+import com.thesis.garby.ui.hideSystemBars
 import com.thesis.garby.ui.theme.GarbyTheme
 
 class MainActivity : ComponentActivity() {
@@ -56,6 +57,7 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
         )
+        window.hideSystemBars()
         if (savedInstanceState == null) {
             requestNotificationPermission()
             handleNotificationIntent(intent)
@@ -66,6 +68,12 @@ class MainActivity : ComponentActivity() {
                 GarbyApp(notificationOpens = notificationOpens.intValue)
             }
         }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // Re-enter immersive mode after Home/resume, permission prompts and modal windows.
+        if (hasFocus) window.hideSystemBars()
     }
 
     override fun onNewIntent(intent: Intent) {
