@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon foreground on the 108 dp canvas (66 dp safe zone). The logo's white ring is
+     scaled to about 62 dp, and the off-centre artwork is shifted right 2.9 dp so the disc sits in
+     the middle. The disc is ic_launcher_background's colour, so its edge disappears. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:width="97.5dp"
+        android:height="71.6dp"
+        android:drawable="@drawable/app_icon"
+        android:gravity="center"
+        android:left="5.7dp" />
+</layer-list>
