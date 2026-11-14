@@ -1,7 +1,8 @@
 # Android manual-disposal review — 2026-11-14
 
-This repository and its corrected Test2 ZIP contain the Android app, app tests, Firebase
-client contract and app verification only. Robot source, firmware patches and robot logs
+This repository contains the Android app, app tests, Firebase client contract and app
+verification only. Its single Most Latest release distributes one installable APK.
+Robot source, firmware patches and robot logs
 belong to [Garby](https://github.com/YAKITORIHOSHI/Garby).
 
 The review integrated confirmed manual disposal and repaired the Android timeout race:
@@ -20,6 +21,7 @@ operation remain unverified. No app install or live database command was perform
 [App files and evidence](verification/2026-11-14-mobile-integration/VERIFICATION.md).
 The app static checker now rejects robot source folders and robot verification artifacts.
 
-Test1 is preserved unchanged. Test2 contains this app source and its matching APK under
-`apk/`, with no Pi, bridge or executor source. Robot deployment is documented only in the
-[robot repository](https://github.com/YAKITORIHOSHI/Garby).
+The release asset is `GarbyMostLatest.apk`; app ZIPs, old/unsigned APKs, checksum attachments
+and superseded releases are removed. The robot Test1/Test2 ZIPs are preserved only in the
+[robot repository](https://github.com/YAKITORIHOSHI/Garby). APK bytes and production source
+are unchanged by this release cleanup, so no rebuild was needed.

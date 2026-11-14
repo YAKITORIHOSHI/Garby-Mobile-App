@@ -85,10 +85,11 @@ in the actual Firebase rules. See [FIREBASE_CONFIGURATION.md](FIREBASE_CONFIGURA
 and the separate robot repository's
 [deployment notes](https://github.com/YAKITORIHOSHI/Garby/blob/main/docs/manual-disposal-2026-11-13.md).
 
-The release provides `GarbyMostLatest-Test1.zip` (the previous app revision) and
-`GarbyMostLatest-Test2.zip` (manual disposal). Extract each ZIP to a local disk before
-opening it in Android Studio. Each contains its matching APK for installation without a build.
-Both use the same Android package; compare them on separate devices or installations.
+The single **Most Latest** release provides only the current installable
+[GarbyMostLatest.apk](https://github.com/YAKITORIHOSHI/Garby-Mobile-App/releases/download/most-latest/GarbyMostLatest.apk).
+For source builds, clone this repository separately and open it in Android Studio from a
+local disk. Robot Test1/Test2 ZIPs are distributed only from the separate
+[Garby release](https://github.com/YAKITORIHOSHI/Garby/releases/tag/latest).
 
 ## Project layout
 
