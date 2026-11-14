@@ -8,7 +8,7 @@
 - Android: 64 passing unit tests, lint with no issues, optimized development-signed APK and
   unsigned release APK built on Windows. Physical phone performance was not retested.
 - The mobile repository contains Android source and app evidence only. Its single
-  **Most Latest** release distributes only `GarbyMostLatest.apk`. Robot source and the
+  **Most Latest** release distributes only `GarbyMobileApp.apk`. Robot source and the
   preserved Test1/Test2 ZIPs remain in the separate
   [Garby repository](https://github.com/YAKITORIHOSHI/Garby).
 - [Review, exact changes and verification limits](docs/2026-11-14-integration-review.md).

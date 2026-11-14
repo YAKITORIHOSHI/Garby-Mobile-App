@@ -21,7 +21,7 @@ operation remain unverified. No app install or live database command was perform
 [App files and evidence](verification/2026-11-14-mobile-integration/VERIFICATION.md).
 The app static checker now rejects robot source folders and robot verification artifacts.
 
-The release asset is `GarbyMostLatest.apk`; app ZIPs, old/unsigned APKs, checksum attachments
+The release asset is `GarbyMobileApp.apk`; app ZIPs, old/unsigned APKs, checksum attachments
 and superseded releases are removed. The robot Test1/Test2 ZIPs are preserved only in the
 [robot repository](https://github.com/YAKITORIHOSHI/Garby). APK bytes and production source
 are unchanged by this release cleanup, so no rebuild was needed.
