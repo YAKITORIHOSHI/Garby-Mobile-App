@@ -71,10 +71,13 @@ driver requires kernel-dump analysis. See the
 
 ## Source and deployment boundaries
 
-The mobile directory is the Git repository; its siblings and parent have no Git metadata.
-Mobile source and evidence are committed normally. The exact sibling edits are retained
-locally and archived as `robot-integration.patch` with source hashes in this repository;
-they are not represented as separately pushed robot repositories.
+The mobile working directory is a Git repository; its sibling working directories and
+parent have no Git metadata. Mobile source and evidence are committed normally to
+[`Garby-Mobile-App`](https://github.com/YAKITORIHOSHI/Garby-Mobile-App). The owner also
+requested synchronization of [`Garby`](https://github.com/YAKITORIHOSHI/Garby), so the
+coordinated robot sources and current mobile subtree are published through a separate local
+checkout of that repository. The exact eleven review repairs remain archived as
+`robot-integration.patch` with source hashes for comparison with the starting workspace.
 
 **MCU upload requirement for the turn repair: Both** complete `BLE_Receiver-Final` and
 `MAIN_EXECUTOR_CODE` sketches, build ID `RECONNECT-20261114`. Actual uploads: none in this
