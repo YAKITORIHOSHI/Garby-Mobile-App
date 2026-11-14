@@ -8,13 +8,13 @@ external acceptance items.
 ## Responsibilities
 
 Android authenticates through Firebase, shows what GARBY reports, marks old data
-stale, and asks GARBY to return to base. It cannot grant GO, clear an obstacle,
+stale, and asks GARBY to start a confirmed manual disposal or return to base. It cannot grant GO, clear an obstacle,
 steer a wheel, release an emergency stop, or substitute cached values for sensor
 clearance.
 
 | Area | Source |
 | --- | --- |
-| Firebase gateway (listeners, the one control write) | `realtime/GarbyRealtimeDb.kt` |
+| Firebase gateway (listeners, disposal and return writes) | `realtime/GarbyRealtimeDb.kt` |
 | Pure rules, unit tested | `realtime/ReturnLogic.kt`, `Thresholds.kt`, `PiHealth.kt`, `SensorFreshness.kt`, `Models.kt` |
 | Dashboard state | `realtime/DeviceViewModel.kt` (screen-scoped, lifecycle-aware) |
 | Return workflow | `ReturnViewModel.kt` (activity-scoped, `SavedStateHandle`) |
@@ -69,6 +69,33 @@ The obsolete `APP/isReadyToReset` flag is no longer read. A route fault or inter
 requires supervised physical recovery, never another app request.
 
 ## Freshness and startup
+
+### Manual disposal
+
+The dashboard adds a static **Manual disposal** card and scrollable confirmation dialog.
+`DisposalLogic.kt` requires internet/cloud, fresh Pi and 15-second executor eligibility,
+explicit IDLE, BLE and a loaded command record. Bin level, gas, load and obstacle readings
+do not authorize or prevent the request: the controllers retain all movement gates. A
+pending/dispatching/unknown command and a submission already in progress disable the action.
+
+`DeviceViewModel` collects one new conflated `commands/dispose` listener inside the existing
+visible-screen coroutine scope. It detaches on backgrounding; no timer or thread pool is
+added. Submission and snapshot decoding use `GarbyDispatchers.background`, with Firebase
+Tasks/callbacks suspending. Existing bitmap limits, lazy grid, reduced effects and no-blur
+rendering remain intact; no dependency or Android permission is added.
+
+After confirmation, the ViewModel rechecks readiness, then the gateway re-reads device status
+and the command before an atomic compare-and-set transaction. A random request ID and
+server timestamp identify the request. Competing or unresolved requests abort replacement;
+speculative local transaction events are disabled. Timeout/cancellation purges pending
+writes and reports uncertainty when transmission may have happened. A committed write is
+displayed as pending until the Pi records the matching executor ACK (`accepted`), rejection
+(`failed`) or missing result (`unconfirmed`). Acceptance does not claim arrival. Server
+command state remains available after rotation/process death; there is no automatic resend.
+
+The Pi claims each request durably before one START; recovery only queries the recorded
+controller ID. `commands/reset` and its existing return rules do not change. Rules preparation
+is in `FIREBASE_CONFIGURATION.md`; `DisposalLogicTest.kt` is prepared for the Windows test run.
 
 Dashboard values expire after 90 s, with 30 s future-clock tolerance. Unknown values remain
 unavailable rather than synthetic zeros; the Pi's 999 cm and -1 sentinels show as unavailable.
@@ -176,3 +203,12 @@ the local development key, for performance checks on the phone. It uses the same
 ID and data as the app; obtain approval before replacing the phone installation. This is a local
 verification artifact, not production signing. Use release-equivalent builds for performance
 comparisons because Compose debug instrumentation adds substantial overhead.
+
+## Manual-disposal outcome reconciliation
+
+Local uncertain-delivery notices carry their generated request ID. A known server stage for
+that exact ID clears the local warning and displays the authoritative request status. This
+also handles the listener arriving before the write callback. A report for another ID or an
+unknown stage cannot resolve the uncertainty, and a write receipt cannot replace a newer
+request or downgrade an outcome already delivered by the listener. This adds no listener,
+timer or network retry. Acceptance still describes route intent, separately from arrival.

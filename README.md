@@ -1,7 +1,7 @@
 # GARBY — Android operator app
 
 The phone app for GARBY, the autonomous waste-collection robot. It shows what
-the robot is doing and lets an operator send it back to base from the collection point. It
+the robot is doing and lets an operator request manual disposal or send it back to base from the collection point. It
 talks only to Firebase; it never drives the robot directly, and GARBY's own sensors and the
 Pi monitor's emergency stop always decide whether it moves.
 
@@ -22,6 +22,12 @@ Pi monitor's emergency stop always decide whether it moves.
   collection point, reporting, linked and scanning; cloud and phone online; no return already
   running), a confirmation with the safety points, and live progress: sent, accepted by GARBY,
   back at base, or failed with the reason in plain words.
+- **Manual disposal:** on the dashboard, press **Manual disposal**, then confirm **Yes, start
+  disposal** to send an idle GARBY to the collection point before the bin, gas or weight
+  thresholds are reached. Cancel sends nothing. GARBY's own obstacle, heading and emergency
+  stop checks still control motion. The latest request shows sent, accepted, rejected or
+  delivery not confirmed; accepted does not mean arrival. Follow robot status, empty the bin
+  at the collection point, then use the existing return action.
 - **Notifications:** receives GARBY push messages when a sender is configured (none is
   deployed yet).
 
@@ -64,6 +70,23 @@ replaces the optimized installation with a debug build.
 `python -B tools/static_quality_check.py` checks the app's security and safety rules without an
 Android SDK. In the coordinated robot workspace, its root `tools/verify_project.py` also runs
 the Android checks alongside the robot's checks.
+
+To verify a manual-disposal build from this folder in PowerShell:
+
+```powershell
+python -B tools/static_quality_check.py
+.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleBenchmark --console=plain
+```
+
+Use the optimized `benchmark` variant for a low-end phone check. The new versionCode is 6.
+Manual disposal also needs the matching Pi/MCU update and permission for `commands/dispose`
+in the actual Firebase rules. See [FIREBASE_CONFIGURATION.md](FIREBASE_CONFIGURATION.md)
+and the coordinated workspace's [deployment notes](../docs/manual-disposal-2026-11-13.md).
+
+The release provides `GarbyMostLatest-Test1.zip` (the previous app revision) and
+`GarbyMostLatest-Test2.zip` (manual disposal). Extract each ZIP to a local disk before
+opening it in Android Studio. Each contains its matching APK for installation without a build.
+Both use the same Android package; compare them on separate devices or installations.
 
 ## Project layout
 

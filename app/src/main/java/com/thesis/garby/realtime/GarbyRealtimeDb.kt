@@ -3,6 +3,8 @@ package com.thesis.garby.realtime
 import android.util.Log
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.MutableData
+import com.google.firebase.database.Transaction
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ServerValue
 import com.google.firebase.database.ValueEventListener
@@ -26,10 +28,14 @@ import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import java.util.UUID
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlin.math.min
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -490,7 +496,9 @@ object GarbyRealtimeDb {
             throttledFlags = device?.child("throttledFlags")?.getLongOrNull(),
             bleConnected = device?.child("bleConnected")?.getBooleanOrNull(),
             lidarHealthy = device?.child("lidarHealthy")?.getBooleanOrNull(),
-            sensorSerialConnected = device?.child("sensorSerialConnected")?.getBooleanOrNull()
+            sensorSerialConnected = device?.child("sensorSerialConnected")?.getBooleanOrNull(),
+            manualDisposalReady = device?.child("manualDisposalReady")?.getBooleanOrNull(),
+            manualDisposalUpdatedAtMs = device?.child("manualDisposalUpdatedAt")?.getLongOrNull() ?: 0L
         )
     }
 
@@ -531,6 +539,106 @@ object GarbyRealtimeDb {
             failedAtMs = snapshot.child("failedAt").getLongOrNull()?.takeIf { it > 0L },
             reason = snapshot.child("reason").getStringOrNull()
         )
+    }
+
+    /** One conflated listener, owned by the visible dashboard. */
+    fun disposalCommand(deviceId: String = RtdbConstants.DEFAULT_DEVICE_ID): Flow<DisposalCommand?> {
+        requireValidDeviceId(deviceId)
+        return callbackFlow {
+            val ref = database.getReference("devices/$deviceId/commands/dispose")
+            val listener = object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) { trySend(snapshot) }
+                override fun onCancelled(error: DatabaseError) {
+                    close(RtdbCancelledException(error.code, error.message))
+                }
+            }
+            ref.addValueEventListener(listener)
+            awaitClose { ref.removeEventListener(listener) }
+        }.conflate().map { extractDisposalCommand(it) }
+            .retryTransientWithJitter(MAX_RETRY_ATTEMPTS)
+            .distinctUntilChanged().conflate().flowOn(GarbyDispatchers.background)
+    }
+
+    private fun extractDisposalCommand(snapshot: DataSnapshot): DisposalCommand? {
+        if (!snapshot.exists()) return null
+        return DisposalCommand(
+            requestId = snapshot.child("requestId").getStringOrNull().orEmpty(),
+            requestedAtMs = snapshot.child("requestedAt").getLongOrNull() ?: 0L,
+            requestedBy = snapshot.child("requestedBy").getStringOrNull().orEmpty(),
+            status = DisposalStatus.fromWire(snapshot.child("status").getStringOrNull()),
+            reason = snapshot.child("reason").getStringOrNull()
+        )
+    }
+
+    /** Atomic submission prevents two phones from replacing an unresolved disposal request. */
+    suspend fun requestDisposal(deviceId: String, requestedBy: String): DisposalSubmission {
+        requireValidDeviceId(deviceId)
+        require(requestedBy.isNotBlank())
+        var writeAttempted = false
+        val requestId = UUID.randomUUID().toString().replace("-", "")
+        try {
+            return withTimeout(RtdbConstants.WRITE_TIMEOUT_MS.milliseconds) {
+                if (!NetworkConnectivityManager.isNetworkConnected()) {
+                    return@withTimeout DisposalSubmission.NotSent("This phone is offline. Nothing was sent.")
+                }
+                waitForFirebaseConnection()
+                database.purgeOutstandingWrites()
+                val statusSnapshot = database.getReference("devices/$deviceId/status").get().await()
+                val ref = database.getReference("devices/$deviceId/commands/dispose")
+                val current = extractDisposalCommand(ref.get().await())
+                val block = disposalBlockReason(
+                    extractDeviceStatus(null, statusSnapshot), true,
+                    NetworkConnectivityManager.isNetworkConnected(),
+                    DisposalUiState(command = current, loaded = true), System.currentTimeMillis()
+                )
+                if (block != null) return@withTimeout DisposalSubmission.NotSent("$block Nothing was sent.")
+                val expectedId = current?.requestId
+                writeAttempted = true
+                suspendCancellableCoroutine<DisposalSubmission> { continuation ->
+                    ref.runTransaction(object : Transaction.Handler {
+                        override fun doTransaction(data: MutableData): Transaction.Result {
+                            if (!continuation.isActive || !NetworkConnectivityManager.isNetworkConnected() ||
+                                !canReplaceDisposal(expectedId, data.child("requestId").value as? String,
+                                    data.child("status").value as? String, data.value != null)) return Transaction.abort()
+                            data.value = mapOf(
+                                "version" to 1,
+                                "requestId" to requestId,
+                                "requestedAt" to ServerValue.TIMESTAMP,
+                                "requestedBy" to requestedBy,
+                                "status" to "pending"
+                            )
+                            return Transaction.success(data)
+                        }
+
+                        override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {
+                            if (!continuation.isActive) return
+                            if (error != null) continuation.resumeWithException(error.toException())
+                            else {
+                                val written = snapshot?.let { extractDisposalCommand(it) }
+                                continuation.resume(when {
+                                    !committed -> DisposalSubmission.NotSent(
+                                        "Request status changed. Refresh and try again; nothing was sent.")
+                                    written != null && written.requestId == requestId &&
+                                        written.requestedBy == requestedBy && written.requestedAtMs > 0L ->
+                                        DisposalSubmission.Sent(written)
+                                    else -> DisposalSubmission.Unconfirmed(
+                                        "Request identity was not confirmed. Check GARBY before trying again.", requestId)
+                                })
+                            }
+                        }
+                    }, false) // Never render a local speculative command as accepted by the server.
+                }
+            }
+        } catch (error: CancellationException) {
+            database.purgeOutstandingWrites()
+            if (error !is TimeoutCancellationException) throw error
+        } catch (error: Exception) {
+            database.purgeOutstandingWrites()
+            Log.w(TAG, "Manual disposal submission failed", error)
+        }
+        return if (writeAttempted) DisposalSubmission.Unconfirmed(
+            "Delivery not confirmed. Check GARBY and the request status before trying again.", requestId
+        ) else DisposalSubmission.NotSent("The request could not be prepared. Nothing was sent.")
     }
 
     /**

@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
@@ -76,6 +78,8 @@ import com.thesis.garby.realtime.DeviceStatus
 import com.thesis.garby.realtime.DeviceStatusUiState
 import com.thesis.garby.realtime.DeviceUiState
 import com.thesis.garby.realtime.DeviceViewModel
+import com.thesis.garby.realtime.disposalBlockReason
+import com.thesis.garby.realtime.disposalMessage
 import com.thesis.garby.realtime.ExecutorThresholds
 import com.thesis.garby.realtime.GasSensor
 import com.thesis.garby.realtime.HealthLevel
@@ -153,7 +157,9 @@ fun MainDashboard(
         state = state,
         summary = summary,
         onOpenReturn = onOpenReturn,
-        onSignOut = { confirmSignOut = true }
+        onSignOut = { confirmSignOut = true },
+        onManualDisposal = deviceViewModel::requestDisposal,
+        onDismissDisposalNotice = deviceViewModel::clearDisposalNotice
     )
 
     if (confirmSignOut) {
@@ -172,8 +178,13 @@ fun DashboardContent(
     state: DeviceUiState,
     summary: ReturnSummary,
     onOpenReturn: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onManualDisposal: () -> Unit = {},
+    onDismissDisposalNotice: () -> Unit = {}
 ) {
+    var confirmDisposal by rememberSaveable { mutableStateOf(false) }
+    val disposalBlocked = disposalBlockReason(state.device.status, state.cloudConnected,
+        state.internetAvailable, state.disposal, state.nowMs)
     val robotState = state.device.status?.robotState
     val systemTiles = healthTiles(state)
     val (subtitle, subtitleColor) = cloudSubtitle(state)
@@ -217,6 +228,11 @@ fun DashboardContent(
                 fullWidth("connectivity") { ConnectivityBanner(issue) }
             }
             fullWidth("hero") { RobotHeroCard(state = state, summary = summary) }
+            fullWidth("manual-disposal") {
+                ManualDisposalCard(state, disposalBlocked,
+                    onStart = { confirmDisposal = true },
+                    onDismissNotice = onDismissDisposalNotice)
+            }
 
             fullWidth("bin-header", contentType = "section-header") {
                 SectionHeader(
@@ -259,6 +275,57 @@ fun DashboardContent(
 
             fullWidth("footer") { Footer() }
         }
+    }
+    if (confirmDisposal) {
+        GlassDialog(onDismissRequest = { confirmDisposal = false }) {
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("Start manual disposal?", style = MaterialTheme.typography.titleLarge,
+                    color = GarbyColors.TextPrimary)
+                Text("Are you sure you want GARBY to go to the collection point now? " +
+                    "Bin level, gas and weight thresholds do not need to be reached. " +
+                    "Obstacle detection and emergency stop remain active.",
+                    style = MaterialTheme.typography.bodyMedium, color = GarbyColors.TextSecondary)
+                if (disposalBlocked != null) Text(disposalBlocked,
+                    style = MaterialTheme.typography.bodySmall, color = GarbyColors.Caution)
+                GlassButton("Yes, start disposal", onClick = {
+                    confirmDisposal = false
+                    onManualDisposal()
+                }, enabled = disposalBlocked == null, modifier = Modifier.fillMaxWidth())
+                GlassButton("Cancel", onClick = { confirmDisposal = false },
+                    style = GlassButtonStyle.Secondary, modifier = Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+@Composable
+private fun ManualDisposalCard(
+    state: DeviceUiState,
+    blocked: String?,
+    onStart: () -> Unit,
+    onDismissNotice: () -> Unit
+) {
+    GlassPanel(modifier = Modifier.fillMaxWidth()) {
+        Text("Manual disposal", style = MaterialTheme.typography.titleMedium,
+            color = GarbyColors.TextPrimary)
+        Text("Empty the bin after school, even before its thresholds are reached.",
+            style = MaterialTheme.typography.bodySmall, color = GarbyColors.TextSecondary)
+        val message = if (state.disposal.submitting || state.disposal.notice != null) null
+            else disposalMessage(state.disposal.command, state.nowMs)
+        if (message != null) Text("Latest request: $message", style = MaterialTheme.typography.bodySmall,
+            color = GarbyColors.TextSecondary, modifier = Modifier.padding(top = 8.dp))
+        state.disposal.notice?.let { notice ->
+            Text(notice, style = MaterialTheme.typography.bodySmall, color = GarbyColors.Caution,
+                modifier = Modifier.padding(top = 8.dp))
+            GlassButton("Dismiss message", onClick = onDismissNotice,
+                style = GlassButtonStyle.Secondary, modifier = Modifier.fillMaxWidth())
+        }
+        if (blocked != null) Text(blocked, style = MaterialTheme.typography.bodySmall,
+            color = GarbyColors.TextMuted, modifier = Modifier.padding(top = 8.dp))
+        GlassButton("Manual disposal", onClick = onStart, enabled = blocked == null,
+            loading = state.disposal.submitting, icon = Icons.Rounded.DeleteOutline,
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
     }
 }
 

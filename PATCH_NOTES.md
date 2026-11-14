@@ -1,5 +1,32 @@
 # GARBY Mobile App - Patch Notes
 
+## GarbyMostLatest-Test2 — 2026-11-14
+
+- Integrates the confirmed manual-disposal feature below. A late matching cloud report now
+  replaces a local timeout notice; a callback arriving before the timeout result cannot have
+  its accepted/rejected outcome hidden. Another request cannot resolve this request's warning.
+- Android: 64 passing unit tests, lint with no issues, optimized development-signed APK and
+  unsigned release APK built on Windows. Physical phone performance was not retested.
+- Coordinated robot review reproduced and repaired loss of turn-sweep protection across BLE
+  reconnect. The bridge preserves turn state and holds GO while unknown after restart; the
+  executor replays that state before readiness. Matching complete firmware sketches are
+  required. Test1 retains the previous mobile revision for separate comparison.
+- [Review, exact changes and verification limits](docs/2026-11-14-integration-review.md).
+
+## Most Latest · Manual Disposal (versionCode 6)
+
+2026-11-13 — Confirmed manual disposal for end-of-school collection.
+
+- Dashboard button and confirmation send an idle GARBY to the collection point before
+  bin/gas/load thresholds are met. Obstacles, heading and emergency stop still gate motion.
+- Transactional, expiring requests cannot replace unresolved requests; sent and controller
+  acceptance are separate. Unconfirmed delivery never shows as success or auto-resends.
+- Reuses existing reduced effects, lazy dashboard, bounded background dispatcher and
+  lifecycle-owned listeners. No new dependency, image, animation, phone polling or thread pool.
+- Source static checks run in the coordinated workspace. Android tests, lint and assembly now
+  pass on Windows; low-end phone performance remains unmeasured for this feature. Matching Pi/MCU deployment
+  and an explicit disposal Firebase rule are required.
+
 ## Most Latest
 
 2026-11-14 — Dashboard categories, indicators and fullscreen experience.

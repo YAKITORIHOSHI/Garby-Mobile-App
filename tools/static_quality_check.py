@@ -89,6 +89,23 @@ for forbidden_dependency in [
     if forbidden_dependency in build_text:
         fail(f"Unused/legacy dependency returned: {forbidden_dependency}")
 
+# The new control must remain confirmed, transactional and lifecycle-bound.
+disposal_sources = {
+    "MainDashboard.kt": ["Start manual disposal?", "Yes, start disposal", "confirmDisposal = false"],
+    "realtime/GarbyRealtimeDb.kt": ["commands/dispose", "ref.runTransaction(",
+        "canReplaceDisposal(", "extractDeviceStatus(null, statusSnapshot)"],
+    "realtime/DeviceViewModel.kt": ["collectDisposal(this)", "disposalJob?.isActive",
+        "GarbyDispatchers.background"],
+    "realtime/DisposalLogic.kt": ["manualDisposalReady != true", "RobotState.Idle",
+        "DisposalStatus.Unknown", "Follow the robot status for arrival"],
+}
+for relative, required in disposal_sources.items():
+    path = JAVA / "com/thesis/garby" / relative
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    for marker in required:
+        if marker not in text:
+            fail(f"Manual disposal invariant missing in {relative}: {marker}")
+
 # Local resource references must resolve by resource stem, in any qualified folder
 # (for example drawable-nodpi).
 resource_stems: dict[str, set[str]] = {}

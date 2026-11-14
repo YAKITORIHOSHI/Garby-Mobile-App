@@ -2,10 +2,13 @@ package com.thesis.garby.realtime
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseAuth
 import com.thesis.garby.network.NetworkConnectivityManager
 import com.thesis.garby.performance.GarbyDispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -42,6 +45,7 @@ data class DeviceUiState(
     val mq137: SensorReadingUiState = SensorReadingUiState(),
     val mq4: SensorReadingUiState = SensorReadingUiState(),
     val device: DeviceStatusUiState = DeviceStatusUiState(),
+    val disposal: DisposalUiState = DisposalUiState(),
     /** Clock used for every age shown on screen; ticks every [RtdbConstants.FRESHNESS_TICK_MS]. */
     val nowMs: Long = 0L
 ) {
@@ -57,6 +61,7 @@ class DeviceViewModel : ViewModel() {
     }
 
     private val deviceId = RtdbConstants.DEFAULT_DEVICE_ID
+    private var disposalJob: Job? = null
     private val _uiState = MutableStateFlow(DeviceUiState(nowMs = System.currentTimeMillis()))
     val uiState: StateFlow<DeviceUiState> = _uiState.asStateFlow()
 
@@ -65,6 +70,11 @@ class DeviceViewModel : ViewModel() {
         // Never show cached pre-background data as ready before fresh callbacks.
         _uiState.value = DeviceUiState(
             internetAvailable = NetworkConnectivityManager.isInternetAvailable.value,
+            disposal = DisposalUiState(
+                submitting = _uiState.value.disposal.submitting,
+                notice = _uiState.value.disposal.notice,
+                noticeRequestId = _uiState.value.disposal.noticeRequestId
+            ),
             nowMs = System.currentTimeMillis()
         )
         collectConnection(this)
@@ -77,8 +87,53 @@ class DeviceViewModel : ViewModel() {
         collectSensor(this, SensorKey.Mq137, startupDelayMs = 240L)
         collectSensor(this, SensorKey.Mq4, startupDelayMs = 320L)
         collectDeviceStatus(this)
+        collectDisposal(this)
         startFreshnessTicker(this)
         awaitCancellation()
+    }
+
+    private fun collectDisposal(scope: CoroutineScope) {
+        scope.launch(GarbyDispatchers.background) {
+            GarbyRealtimeDb.disposalCommand(deviceId)
+                .catch { error ->
+                    if (error is CancellationException) throw error
+                    _uiState.update { state -> state.copy(disposal = state.disposal.copy(
+                        loaded = true, error = "Manual disposal status unavailable"
+                    )) }
+                }
+                .collect { command ->
+                    _uiState.update { state -> state.copy(disposal = state.disposal.withCommand(command)) }
+                }
+        }
+    }
+
+    /** Called only after explicit confirmation; recheck the gate before doing any cloud work. */
+    fun requestDisposal() {
+        if (disposalJob?.isActive == true) return
+        val state = _uiState.value
+        val blocked = disposalBlockReason(state.device.status, state.cloudConnected,
+            state.internetAvailable, state.disposal, System.currentTimeMillis())
+        val uid = FirebaseAuth.getInstance().currentUser?.uid?.takeIf { it.isNotBlank() }
+        if (blocked != null || uid == null) {
+            _uiState.update { it.copy(disposal = it.disposal.copy(
+                notice = blocked ?: "Your session ended. Connect again.", noticeRequestId = null
+            )) }
+            return
+        }
+        _uiState.update { it.copy(disposal = it.disposal.copy(
+            submitting = true, notice = null, noticeRequestId = null)) }
+        disposalJob = viewModelScope.launch(GarbyDispatchers.background) {
+            try {
+                val result = GarbyRealtimeDb.requestDisposal(deviceId = deviceId, requestedBy = uid)
+                _uiState.update { it.copy(disposal = it.disposal.withSubmission(result)) }
+            } finally {
+                _uiState.update { it.copy(disposal = it.disposal.copy(submitting = false)) }
+            }
+        }
+    }
+
+    fun clearDisposalNotice() {
+        _uiState.update { it.copy(disposal = it.disposal.copy(notice = null, noticeRequestId = null)) }
     }
 
     private fun collectConnection(scope: CoroutineScope) {

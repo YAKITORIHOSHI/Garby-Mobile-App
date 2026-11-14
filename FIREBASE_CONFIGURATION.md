@@ -30,12 +30,14 @@ and in the Pi runtime must stay the same; `RasPi/test_firebase_contract.py` chec
 | `devices/garby-bin-01/sensors/{level,weight,mq135,mq137,mq4}` | Readings with `updatedAt` |
 | `RASPI/VALUES/...` | Legacy sensor paths, read only while a device record is absent |
 | `devices/garby-bin-01/commands/reset` | The latest return request and the Pi's outcome |
+| `devices/garby-bin-01/commands/dispose` | Latest manual-disposal request and matching executor acceptance/rejection |
 
 ## What the app writes
 
 | Path | When |
 | --- | --- |
 | `devices/garby-bin-01/commands/reset/{requestedAt, requestedBy, status, ackAt, doneAt, failedAt, reason}` | One operator-confirmed return: server-timestamp `requestedAt`, the operator's anonymous UID, `pending`, prior outcome fields cleared |
+| `devices/garby-bin-01/commands/dispose` | One confirmed transaction: `version: 1`, random 32-hex `requestId`, server `requestedAt`, authenticated UID `requestedBy`, `status: pending`; refuses replacing unresolved requests |
 | `devices/garby-bin-01/fcmInstallationId`, `fcmInstallationIdUpdatedAt` | After sign-in: the Firebase Installation ID used by FCM |
 
 The app no longer writes `APP/fcmToken`, `devices/<id>/fcmToken` or `RASPI/fcmToken` (FCM
@@ -69,3 +71,29 @@ self-attributed pending request. A starting point, **not tested against the live
 
 Test any rule change with the Firebase emulator or the Rules Playground before deploying: a rule
 that rejects the return write shows in the app as "Delivery not confirmed" or "Nothing was sent".
+
+## Manual disposal rules preparation — 2026-11-13
+
+The new path needs an explicit rule when your existing rules only allow `commands/reset`.
+[`firebase/manual-disposal.rules.example.json`](firebase/manual-disposal.rules.example.json)
+is a **disposal-only merge example**, not a replacement for the project's full rules. It retains
+the app's existing authenticated-operator model, requires a new random identity and a fresh
+server timestamp, blocks replacement of pending/dispatching requests, and only lets clients
+write the five request fields with status `pending`. The Pi Admin SDK alone records
+`dispatching`, controller identity, claim time and the terminal result. Parent rules must not
+already grant broader writes, because a child rule cannot revoke such permission.
+
+The example has been JSON-checked only; its Firebase rule semantics, deployed permissions and
+multi-client transactions require Emulator/Rules Playground acceptance before deployment.
+Test: authenticated valid request allowed; unauthenticated, reused identity, old timestamp,
+extra claim/result fields, invented accepted status, and replacing unresolved requests denied.
+Test a normal request after each terminal result (accepted/failed/unconfirmed) as well.
+No live rules or database records were changed by this task.
+
+Status now includes `manualDisposalReady` and `manualDisposalUpdatedAt`, written by the Pi from
+fresh executor eligibility. The app requires explicit IDLE and expires eligibility after
+15 seconds. Bin/gas/load readings are not prerequisites. The Pi rejects pending requests
+over 30 seconds old or more than 5 seconds in the future and claims each one before queuing
+one START. A restart only queries the controller ID recorded in the claim. A matching MCU
+ACK means `accepted`, not arrival; after 15 seconds without confirmation the claim becomes
+`unconfirmed`. Return requests retain their separate path and behavior.

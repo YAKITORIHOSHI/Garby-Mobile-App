@@ -50,7 +50,10 @@ data class DeviceStatus(
     val throttledFlags: Long? = null,
     val bleConnected: Boolean? = null,
     val lidarHealthy: Boolean? = null,
-    val sensorSerialConnected: Boolean? = null
+    val sensorSerialConnected: Boolean? = null,
+    /** Fresh Pi + executor eligibility for threshold-free disposal, never motion permission. */
+    val manualDisposalReady: Boolean? = null,
+    val manualDisposalUpdatedAtMs: Long = 0L
 )
 
 /** Wire statuses of `devices/<id>/commands/reset`, written by the app (pending) and the Pi. */

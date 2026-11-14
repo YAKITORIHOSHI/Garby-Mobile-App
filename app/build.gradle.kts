@@ -19,8 +19,8 @@ android {
         // Android 17 target-only changes (local network permission, certificate transparency,
         // background audio, widgets, RFCOMM reads) do not touch this Firebase-only app.
         targetSdk = 37
-        versionCode = 5
-        versionName = "Most Latest"
+        versionCode = 6
+        versionName = "Most Latest · Manual Disposal"
     }
 
     buildTypes {
