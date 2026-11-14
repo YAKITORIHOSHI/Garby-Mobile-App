@@ -171,7 +171,7 @@ submission state on the main dispatcher. All Firebase Tasks still suspend; no wo
 on network I/O and no new thread pool or timing gate is added.
 
 Device observations and verification are described in `docs/2026-11-14-low-end-performance.md`.
-Raw evidence remains in the coordinated workspace's `artifacts/android-low-end-2026-11-14/`.
+App evidence is retained under this repository's `docs/verification/` directory.
 Before/after phone acceptance is a separate step from source changes and successful builds.
 
 ## Notifications
@@ -193,8 +193,8 @@ on a local disk by setting an absolute `garby.buildRoot` in its own `local.prope
 it outputs stay in `app/build`. Daemon memory is 3 GB heap / 1 GB metaspace so lint, R8 and tests
 fit in one run.
 
-The coordinated robot workspace's `tools/verify_project.py` runs Android unit tests,
-debug/release assembly and lint with its robot checks. In this Android repository,
+The Android repository runs its own unit tests, assembly and lint. Optional interoperability
+checks in the separate robot repository can use an external app checkout. Here,
 `python -B tools/static_quality_check.py` checks release invariants without an Android SDK.
 Release assembly is unsigned.
 

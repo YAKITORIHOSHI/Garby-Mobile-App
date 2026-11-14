@@ -16,3 +16,8 @@ captures/
 keystore.properties
 .env
 .env.*
+
+# Separate robot repository; never package robot source in the Android project.
+/RasPi/
+/BLE_Receiver-Final/
+/MAIN_EXECUTOR_CODE/

@@ -4,19 +4,17 @@ Updated 2026-11-14.
 
 ## Client configuration
 
-`app/google-services.json` is synced from `../RasPi/Firebase/google-services.json`; the two files
-are byte-identical (SHA-256 `b7cb3fb4dead8e625288cb9dd068f54a8ca5e1cb52eeb8d8a647ee1589b4d582`,
-checked 2026-11-14). It registers package `com.thesis.garby` in project `garby-thesis`. The
-Realtime Database URL in that file, in `app/src/main/java/com/thesis/garby/realtime/Constants.kt`
-and in the Pi runtime must stay the same; `RasPi/test_firebase_contract.py` checks this.
+`app/google-services.json` registers package `com.thesis.garby` in project `garby-thesis`.
+The database URL must agree with `realtime/Constants.kt` and the independently deployed
+backend. Backend implementation and optional cross-repository contract checks belong to
+[Garby](https://github.com/YAKITORIHOSHI/Garby), not this Android repository.
 
 ## Credential boundaries
 
 - The app signs in with Firebase **anonymous authentication** (`firestore/AuthViewModel.kt`). It
   contains no password and no service-account key.
-- The Admin SDK key under `RasPi/Firebase/` belongs only on the Pi; never copy it into the app.
-  `RasPi/Firebase/FireBase.txt` holds a plaintext account password: rotate it if it is current
-  and keep future copies in a private secret store.
+- Backend Admin credentials belong only on the robot's supervisor and must never enter the
+  Android repository or APK.
 - `google-services.json` is client configuration, not an Admin credential. Access control comes
   from Authentication settings, database rules and any API-key restrictions.
 

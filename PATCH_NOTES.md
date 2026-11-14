@@ -7,10 +7,9 @@
   its accepted/rejected outcome hidden. Another request cannot resolve this request's warning.
 - Android: 64 passing unit tests, lint with no issues, optimized development-signed APK and
   unsigned release APK built on Windows. Physical phone performance was not retested.
-- Coordinated robot review reproduced and repaired loss of turn-sweep protection across BLE
-  reconnect. The bridge preserves turn state and holds GO while unknown after restart; the
-  executor replays that state before readiness. Matching complete firmware sketches are
-  required. Test1 retains the previous mobile revision for separate comparison.
+- The mobile repository and Test2 ZIP contain Android source, app evidence and APK only.
+  Robot source and verification remain in the separate
+  [Garby repository](https://github.com/YAKITORIHOSHI/Garby). Test1 is preserved unchanged.
 - [Review, exact changes and verification limits](docs/2026-11-14-integration-review.md).
 
 ## Most Latest · Manual Disposal (versionCode 6)

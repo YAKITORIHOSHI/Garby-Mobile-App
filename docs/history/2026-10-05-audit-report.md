@@ -9,7 +9,7 @@ The current app is described in [SYSTEM_ARCHITECTURE.md](../../SYSTEM_ARCHITECTU
 
 Audited the Android/Kotlin project from application architecture through Firebase control flow, lifecycle/state handling, security, networking, UI data integrity, performance, build configuration, and package hygiene.
 
-This workspace now contains the GARBY Raspberry Pi bridge, BLE bridge, main-controller firmware, Android app, and Firebase RTDB shape. Physical test evidence and Firebase RTDB security rules are still external validation items.
+This historical report described a combined testing workspace. The current repository contains the Android app only; robot source is maintained separately. Physical test evidence and Firebase RTDB security rules are still external validation items.
 
 ## Findings and disposition
 

@@ -67,9 +67,10 @@ select the `benchmark` build variant in Android Studio. The `debug` variant incl
 instrumentation and can scroll substantially more slowly; pressing Run with that variant
 replaces the optimized installation with a debug build.
 
-`python -B tools/static_quality_check.py` checks the app's security and safety rules without an
-Android SDK. In the coordinated robot workspace, its root `tools/verify_project.py` also runs
-the Android checks alongside the robot's checks.
+`python -B tools/static_quality_check.py` checks the app's security, safety and repository
+boundaries without an Android SDK. This repository builds and verifies the Android app
+independently. Robot source and robot verification belong to
+[YAKITORIHOSHI/Garby](https://github.com/YAKITORIHOSHI/Garby).
 
 To verify a manual-disposal build from this folder in PowerShell:
 
@@ -81,7 +82,8 @@ python -B tools/static_quality_check.py
 Use the optimized `benchmark` variant for a low-end phone check. The new versionCode is 6.
 Manual disposal also needs the matching Pi/MCU update and permission for `commands/dispose`
 in the actual Firebase rules. See [FIREBASE_CONFIGURATION.md](FIREBASE_CONFIGURATION.md)
-and the coordinated workspace's [deployment notes](../docs/manual-disposal-2026-11-13.md).
+and the separate robot repository's
+[deployment notes](https://github.com/YAKITORIHOSHI/Garby/blob/main/docs/manual-disposal-2026-11-13.md).
 
 The release provides `GarbyMostLatest-Test1.zip` (the previous app revision) and
 `GarbyMostLatest-Test2.zip` (manual disposal). Extract each ZIP to a local disk before

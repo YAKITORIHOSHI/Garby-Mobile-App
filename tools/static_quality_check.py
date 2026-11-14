@@ -26,6 +26,15 @@ def fail(message: str) -> None:
     failures.append(message)
 
 
+for robot_folder in ("RasPi", "BLE_Receiver-Final", "MAIN_EXECUTOR_CODE"):
+    if (ROOT / robot_folder).exists():
+        fail(f"Separate robot repository content found: {robot_folder}")
+for path in (ROOT / "docs/verification").rglob("*"):
+    if path.is_file() and (path.name == "robot-integration.patch" or
+            path.name.startswith(("firmware-", "bridge-target", "executor-target", "pi-"))):
+        fail(f"Robot verification belongs in the robot repository: {path.relative_to(ROOT)}")
+
+
 # Parse configuration/resources.
 with VERSIONS.open("rb") as handle:
     tomllib.load(handle)
