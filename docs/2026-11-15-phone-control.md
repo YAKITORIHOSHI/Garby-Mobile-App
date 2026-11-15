@@ -4,8 +4,9 @@ This repository contains the Android app only. The robot side (the Pi's command 
 mirror, map frames and headless launcher) is in
 [Garby](https://github.com/YAKITORIHOSHI/Garby), `docs/phone-control-headless-2026-11-15.md`.
 
-**State: source implemented; unit tests, lint and the APK build run in this repository's
-workflow. Not installed on a phone and not run against the robot or the live database.**
+**State: source implemented; unit tests, lint and the signed release build run in this
+repository's workflow; published as the Most Latest `GarbyMobileApp.apk` on 2026-11-15. Not yet
+installed on a phone and not run against the robot or the live database.**
 
 ## What was added
 
@@ -52,7 +53,11 @@ and cannot recognise people; the tab says so.
 - All of it is skipped on the conservative performance profile (low-RAM or slow devices).
 
 Not done: the plan's "card expands into its screen" shared-element transition. It could not be
-tried on a device here and was left out rather than shipped unseen.
+tried on a device here and was left out rather than shipped unseen. Predictive back is not set up
+explicitly either: the app targets API 37, so on Android 16 and later the system enables it by
+default and the navigation library animates going back with the gesture; Android 14 and 15
+phones would need `android:enableOnBackInvokedCallback="true"` in the manifest. Not checked on a
+phone.
 
 ## Operator list
 

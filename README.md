@@ -99,7 +99,7 @@ python -B tools/static_quality_check.py
 .\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleBenchmark --console=plain
 ```
 
-Use the optimized `benchmark` variant for a low-end phone check. The new versionCode is 6.
+Use the optimized `benchmark` variant for a low-end phone check.
 Manual disposal also needs the matching Pi/MCU update and permission for `commands/dispose`
 in the actual Firebase rules. See [FIREBASE_CONFIGURATION.md](FIREBASE_CONFIGURATION.md)
 and the separate robot repository's
