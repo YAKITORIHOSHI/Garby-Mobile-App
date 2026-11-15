@@ -75,26 +75,39 @@ jobs:
 
       - name: Check the APK's signature
         run: |
+          set -o pipefail
           mkdir -p out
           cp app/build/outputs/apk/release/app-release.apk out/GarbyMobileApp.apk
           tools_dir=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)
-          "${tools_dir}apksigner" verify --verbose --print-certs out/GarbyMobileApp.apk > out/apksigner.txt
-          grep -E '^Verified using|^Number of signers|^Signer #1 certificate (DN|SHA-256)' out/apksigner.txt | tee out/signer.txt
-          "${tools_dir}aapt2" dump badging out/GarbyMobileApp.apk | head -n 1 | tee -a out/signer.txt || true
+          # apksigner checks that the signatures are valid (its report is public).
+          "${tools_dir}apksigner" verify --verbose --print-certs out/GarbyMobileApp.apk | tee out/apksigner.txt
           grep -qE '^Verified using v[23] scheme .*: true$' out/apksigner.txt || {
             echo "::error::The APK carries no verified v2/v3 signature."; exit 1; }
           grep -qx 'Number of signers: 1' out/apksigner.txt || {
             echo "::error::The APK must have exactly one signer."; exit 1; }
-          signed=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' out/apksigner.txt)
+          # Who signed it, read from the signature block itself: apksigner's text format
+          # differs between build-tools versions.
+          python3 tools/apk_signer_cert.py out/GarbyMobileApp.apk | tee out/signer.txt
+          signed=$(awk '{print $2}' out/signer.txt | sort -u)
           if [ "$signed" != "$GARBY_RELEASE_CERT_SHA256" ]; then
             echo "::error::The APK is signed with certificate '$signed', not the release certificate."
             exit 1
           fi
+          "${tools_dir}aapt2" dump badging out/GarbyMobileApp.apk | head -n 1 | tee -a out/signer.txt || true
           sha256sum out/GarbyMobileApp.apk | tee out/GarbyMobileApp.apk.sha256
 
       - name: Remove the key file
         if: always()
         run: rm -f "$RUNNER_TEMP/garby-release.p12"
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: signature-report
+          path: |
+            out/apksigner.txt
+            out/signer.txt
+          if-no-files-found: ignore
 
       - uses: actions/upload-artifact@v4
         with:

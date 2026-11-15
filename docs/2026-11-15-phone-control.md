@@ -87,7 +87,9 @@ The keystore (created 2026-11-15) is the owner's and is kept outside both reposi
 backup of it and its password: without them no later APK can update the installed app. The workflow
 never signs with anything else: it stops with an error when a secret is missing, when the alias
 is not in the keystore, when the password does not open it, or when the key's certificate is not
-the one above, and it checks the finished APK with `apksigner` against the same certificate. The
+the one above. On the finished APK, `apksigner` checks the signatures and
+`tools/apk_signer_cert.py` reads the signer's certificate from the signature block and compares
+it with the same certificate. The
 static checker keeps these checks in the workflow. Keep `versionCode` rising with each release:
 then every later APK updates the installed app in place, with its data.
 

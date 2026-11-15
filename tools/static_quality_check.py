@@ -125,10 +125,13 @@ for marker in [
     "secrets.GARBY_KEYSTORE_BASE64",
     ":app:assembleRelease",
     'apksigner" verify',
-    "Signer #1 certificate SHA-256 digest",
+    "python3 tools/apk_signer_cert.py out/GarbyMobileApp.apk",
+    "set -o pipefail",
 ]:
     if marker not in workflow_text:
         fail(f"Release signing invariant missing in android.yml: {marker}")
+if not (ROOT / "tools/apk_signer_cert.py").is_file():
+    fail("tools/apk_signer_cert.py is missing: the release workflow checks the APK's signer with it")
 if re.search(r"debug key", workflow_text, re.IGNORECASE):
     fail("The release workflow must not fall back to a debug key")
 if 'if (garbyKeystore != null) signingConfig = signingConfigs.getByName("garby")' not in build_text:
