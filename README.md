@@ -102,7 +102,7 @@ and the separate robot repository's
 The single **Most Latest** release provides only the current installable
 [GarbyMobileApp.apk](https://github.com/YAKITORIHOSHI/Garby-Mobile-App/releases/download/most-latest/GarbyMobileApp.apk).
 For source builds, clone this repository separately and open it in Android Studio from a
-local disk. Robot Test1/Test2 ZIPs are distributed only from the separate
+local disk. The robot package is distributed only from the separate
 [Garby release](https://github.com/YAKITORIHOSHI/Garby/releases/tag/latest).
 
 ## Project layout
