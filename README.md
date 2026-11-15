@@ -65,13 +65,19 @@ Open this folder in Android Studio and run the `app` configuration, or from a te
 ./gradlew :app:assembleDebug           # debug APK
 ./gradlew :app:testDebugUnitTest       # unit tests
 ./gradlew :app:lintDebug               # lint
-./gradlew :app:assembleRelease         # minified, unsigned release APK
+./gradlew :app:assembleRelease         # minified release APK (unsigned without the release key)
 ./gradlew :app:assembleBenchmark       # minified, signed local performance-test APK
 ```
 
 Outputs are in `app/build/outputs/apk/`. If this checkout is on a network share, add an absolute
 `garby.buildRoot=<local folder>` to `local.properties` and outputs go there instead (see
-`settings.gradle.kts`). Release signing and distribution are done outside this project.
+`settings.gradle.kts`).
+
+**Releases.** Every push to `main` runs `.github/workflows/android.yml`: static checks, unit
+tests, lint and the release APK, signed with the app's persistent release key from the
+repository secrets (alias `garby`, certificate SHA-256 `c7:46:6d:41:…:e2:61`). The build fails
+when the key is missing or different, so every published APK updates the installed app in
+place. Raise `versionCode` in `app/build.gradle.kts` for each release.
 The `benchmark` APK uses the local development signing key, runs without debug instrumentation,
 and is intended for phone performance checks. Installing it replaces the same app and preserves
 its data when the existing signing key matches; it is not a production-signed release.

@@ -115,6 +115,24 @@ for relative, required in disposal_sources.items():
         if marker not in text:
             fail(f"Manual disposal invariant missing in {relative}: {marker}")
 
+# The published APK is the CI release build, always signed with the one persistent key:
+# a different key forces every phone to uninstall the app before it can update.
+WORKFLOW = ROOT / ".github/workflows/android.yml"
+workflow_text = WORKFLOW.read_text(encoding="utf-8") if WORKFLOW.is_file() else ""
+for marker in [
+    "GARBY_RELEASE_CERT_SHA256: c7466d41c7cc87c5812e44235ff3714326f0726751a1be22baa112bc4edae261",
+    "secrets.GARBY_KEYSTORE_BASE64",
+    ":app:assembleRelease",
+    'apksigner" verify',
+    "Signer #1 certificate SHA-256 digest",
+]:
+    if marker not in workflow_text:
+        fail(f"Release signing invariant missing in android.yml: {marker}")
+if re.search(r"debug key", workflow_text, re.IGNORECASE):
+    fail("The release workflow must not fall back to a debug key")
+if 'if (garbyKeystore != null) signingConfig = signingConfigs.getByName("garby")' not in build_text:
+    fail("The release build type must be signed with the persistent garby key")
+
 # Local resource references must resolve by resource stem, in any qualified folder
 # (for example drawable-nodpi).
 resource_stems: dict[str, set[str]] = {}

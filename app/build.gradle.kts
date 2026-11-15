@@ -23,9 +23,12 @@ android {
         versionName = "Most Latest · Phone Control"
     }
 
-    // The release build's own key, supplied from outside the repository (the CI workflow
-    // reads it from repository secrets). Without it the benchmark build falls back to the
-    // machine's debug key, which installs but differs from machine to machine.
+    // The app's persistent release key, supplied from outside the repository: the CI workflow
+    // decodes it from repository secrets into GARBY_KEYSTORE_FILE. It is a PKCS12 keystore, so
+    // one password opens both the store and the key; the key's alias is "garby". Every release
+    // must carry this key, or phones cannot update the app in place. Without it the release
+    // build stays unsigned (no key is ever made up for it); only the local benchmark build
+    // below falls back to this machine's debug key, for device checks.
     val garbyKeystore: String? = System.getenv("GARBY_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
     signingConfigs {
         if (garbyKeystore != null) {
@@ -45,10 +48,12 @@ android {
             isShrinkResources = true
             // No app-specific keep rules are needed; each library ships its own consumer rules.
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            if (garbyKeystore != null) signingConfig = signingConfigs.getByName("garby")
         }
         create("benchmark") {
-            // Installable, release-equivalent local performance build. Production release
-            // signing stays external; the development key is only for device verification.
+            // Installable, release-equivalent local performance build: the release key when it
+            // is supplied, otherwise this machine's debug key, for device checks only. The
+            // published APK is the release build from the CI workflow, never this one.
             initWith(getByName("release"))
             signingConfig = signingConfigs.getByName(if (garbyKeystore != null) "garby" else "debug")
             isDebuggable = false

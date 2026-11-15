@@ -68,18 +68,29 @@ not its text. It needs the live rules and a phone to check; no unit test can rea
 ## Build and signing
 
 `.github/workflows/android.yml` runs on every push to `main`: static checker, unit tests, lint,
-then `assembleBenchmark`, and uploads `GarbyMobileApp.apk` as a workflow artifact.
+then `assembleRelease`, and uploads `GarbyMobileApp.apk` with its SHA-256 and signer report as a
+workflow artifact.
 
-The APK is signed with the app's own key when two repository secrets exist:
+The release APK is signed with the app's persistent release key, from two repository secrets:
 
 | Secret | Content |
 | --- | --- |
 | `GARBY_KEYSTORE_BASE64` | the PKCS12 keystore, base64 |
-| `GARBY_KEYSTORE_PASSWORD` | its password |
+| `GARBY_KEYSTORE_PASSWORD` | its password; PKCS12 uses the same password for the key |
 
-The keystore was created on the robot's Pi and is kept outside both repositories. Without the
-secrets the workflow signs with the runner's debug key, which changes on every run: such an APK
-installs, but not over one from another run.
+| Key | Value |
+| --- | --- |
+| Alias | `garby` (the keystore file is called `garby-release.p12`; its key's alias is `garby`) |
+| Certificate | `CN=GARBY Mobile App, O=GARBY Thesis`, valid until 2056-11-07 |
+| Certificate SHA-256 | `c7466d41c7cc87c5812e44235ff3714326f0726751a1be22baa112bc4edae261` |
 
-An APK signed with the new key does not install over the earlier development-signed release:
-uninstall the old app once. Anonymous sign-in then gives the phone a new ID.
+The keystore was created on the robot's Pi and is kept outside both repositories. The workflow
+never signs with anything else: it stops with an error when a secret is missing, when the alias
+is not in the keystore, when the password does not open it, or when the key's certificate is not
+the one above, and it checks the finished APK with `apksigner` against the same certificate. The
+static checker keeps these checks in the workflow. Keep `versionCode` rising with each release:
+then every later APK updates the installed app in place, with its data.
+
+The first APK signed with this key does not install over the earlier development-signed release:
+uninstall the old app once. Anonymous sign-in then gives the phone a new ID for the operator
+list.

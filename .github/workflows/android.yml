@@ -1,11 +1,12 @@
 name: Android build
 
-# Builds and tests the app on every push, and produces the installable APK the release
-# carries. The signing key comes from repository secrets; without them the APK is signed with
-# the runner's debug key (it installs, but not over an APK signed with another key).
+# Tests the app and builds the signed release APK on every push to main. The APK is signed
+# with the app's persistent release key from the repository secrets GARBY_KEYSTORE_BASE64 and
+# GARBY_KEYSTORE_PASSWORD. Without them, or with any other key, the build fails: it never
+# signs with a temporary key, so phones can always update the app in place.
 on:
   push:
-    branches: [main, phone-control]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -14,6 +15,13 @@ permissions:
 concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  # The release certificate's SHA-256 (public: it is inside every APK). A different key would
+  # force every phone to uninstall the app first, so the build refuses one.
+  GARBY_RELEASE_CERT_SHA256: c7466d41c7cc87c5812e44235ff3714326f0726751a1be22baa112bc4edae261
+  # The key's alias inside the PKCS12 keystore. One password opens the store and the key.
+  GARBY_KEY_ALIAS: garby
 
 jobs:
   build:
@@ -32,29 +40,61 @@ jobs:
       - name: Static checks
         run: python3 tools/static_quality_check.py
 
-      - name: Signing key
+      - name: Release key
         env:
           KEYSTORE_BASE64: ${{ secrets.GARBY_KEYSTORE_BASE64 }}
+          GARBY_KEYSTORE_PASSWORD: ${{ secrets.GARBY_KEYSTORE_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/garby-release.p12"
-            echo "GARBY_KEYSTORE_FILE=$RUNNER_TEMP/garby-release.p12" >> "$GITHUB_ENV"
-          else
-            echo "No signing secret: the APK will carry the runner's debug key."
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$GARBY_KEYSTORE_PASSWORD" ]; then
+            echo "::error::Repository secret GARBY_KEYSTORE_BASE64 or GARBY_KEYSTORE_PASSWORD is missing. No APK is built without the release key."
+            exit 1
           fi
+          keystore="$RUNNER_TEMP/garby-release.p12"
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          # Aliases and certificates are public; the password stays in the environment.
+          if ! listing=$(keytool -list -v -storetype PKCS12 -keystore "$keystore" \
+                -storepass:env GARBY_KEYSTORE_PASSWORD -alias "$GARBY_KEY_ALIAS" 2>&1); then
+            echo "::error::The keystore has no key under alias '$GARBY_KEY_ALIAS', or the password does not open it."
+            keytool -list -storetype PKCS12 -keystore "$keystore" \
+              -storepass:env GARBY_KEYSTORE_PASSWORD 2>&1 | grep -E 'Entry|fingerprint|password|rror' || true
+            exit 1
+          fi
+          found=$(printf '%s\n' "$listing" | sed -n 's/^[[:space:]]*SHA256: //p' | head -n 1 | tr -d ':' | tr '[:upper:]' '[:lower:]')
+          if [ "$found" != "$GARBY_RELEASE_CERT_SHA256" ]; then
+            echo "::error::The key under alias '$GARBY_KEY_ALIAS' has certificate SHA-256 '$found', not the release certificate $GARBY_RELEASE_CERT_SHA256."
+            exit 1
+          fi
+          echo "GARBY_KEYSTORE_FILE=$keystore" >> "$GITHUB_ENV"
+          echo "Release key found: alias '$GARBY_KEY_ALIAS', certificate SHA-256 $found."
 
-      - name: Unit tests, lint and APK
+      - name: Unit tests, lint and the signed release APK
         env:
           GARBY_KEYSTORE_PASSWORD: ${{ secrets.GARBY_KEYSTORE_PASSWORD }}
-          GARBY_KEY_ALIAS: garby
-        run: ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleBenchmark
+        run: ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleRelease
 
-      - name: Name the APK
+      - name: Check the APK's signature
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/benchmark/app-benchmark.apk out/GarbyMobileApp.apk
+          cp app/build/outputs/apk/release/app-release.apk out/GarbyMobileApp.apk
+          tools_dir=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)
+          "${tools_dir}apksigner" verify --verbose --print-certs out/GarbyMobileApp.apk > out/apksigner.txt
+          grep -E '^Verified using|^Number of signers|^Signer #1 certificate (DN|SHA-256)' out/apksigner.txt | tee out/signer.txt
+          "${tools_dir}aapt2" dump badging out/GarbyMobileApp.apk | head -n 1 | tee -a out/signer.txt || true
+          grep -qE '^Verified using v[23] scheme .*: true$' out/apksigner.txt || {
+            echo "::error::The APK carries no verified v2/v3 signature."; exit 1; }
+          grep -qx 'Number of signers: 1' out/apksigner.txt || {
+            echo "::error::The APK must have exactly one signer."; exit 1; }
+          signed=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' out/apksigner.txt)
+          if [ "$signed" != "$GARBY_RELEASE_CERT_SHA256" ]; then
+            echo "::error::The APK is signed with certificate '$signed', not the release certificate."
+            exit 1
+          fi
           sha256sum out/GarbyMobileApp.apk | tee out/GarbyMobileApp.apk.sha256
-          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs out/GarbyMobileApp.apk | head -n 4 | tee out/signer.txt || true
+
+      - name: Remove the key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/garby-release.p12"
 
       - uses: actions/upload-artifact@v4
         with:
