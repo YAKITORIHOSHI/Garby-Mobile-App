@@ -338,9 +338,13 @@ fun RouteTrack(
     }
 }
 
-/** A static glass placeholder, shown until the first value arrives. */
+/**
+ * A glass placeholder shaped like a metric card, shown until the first value arrives. A band of
+ * light travels across it; on the conservative performance profile it stays still.
+ */
 @Composable
 fun ShimmerPanel(label: String, modifier: Modifier = Modifier) {
+    val phase = rememberSheenPhase()
     GlassPanel(modifier = modifier.semantics { contentDescription = label }) {
         Box(
             Modifier
@@ -353,15 +357,8 @@ fun ShimmerPanel(label: String, modifier: Modifier = Modifier) {
                         Triple(76.dp.toPx(), size.width * 0.8f, 20.dp.toPx())
                     )
                     onDrawBehind {
-                        val brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.06f),
-                                Color.White.copy(alpha = 0.18f),
-                                Color.White.copy(alpha = 0.06f)
-                            ),
-                            start = Offset(size.width * 0.3f, 0f),
-                            end = Offset(size.width * 0.9f, 0f)
-                        )
+                        // The phase is read here, in the draw phase: no recomposition per frame.
+                        val brush = sheenBrush(size.width.coerceAtLeast(1f), phase?.value ?: 0.45f)
                         bars.forEach { (top, width, height) ->
                             drawRoundRect(
                                 brush = brush,

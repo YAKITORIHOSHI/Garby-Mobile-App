@@ -67,6 +67,15 @@ fun robotStateUi(state: RobotState?, readyFlag: Boolean?): RobotStateUi = when (
         route = RoutePosition.ToBase,
         moving = true
     )
+    RobotState.Reversing -> RobotStateUi(
+        title = "Driving back to the start",
+        description = "The operator sent GARBY back along the route it was on. It turned around and " +
+            "drives forward to where that route began, stopping for anything in its path.",
+        icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
+        color = GarbyColors.Info,
+        route = RoutePosition.ToBase,
+        moving = true
+    )
     RobotState.Fault -> RobotStateUi(
         title = "Route fault",
         description = "GARBY stopped where it is (or refused a return). If this stays, move it back " +

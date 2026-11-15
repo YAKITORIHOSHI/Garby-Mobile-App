@@ -19,8 +19,24 @@ android {
         // Android 17 target-only changes (local network permission, certificate transparency,
         // background audio, widgets, RFCOMM reads) do not touch this Firebase-only app.
         targetSdk = 37
-        versionCode = 6
-        versionName = "Most Latest · Manual Disposal"
+        versionCode = 7
+        versionName = "Most Latest · Phone Control"
+    }
+
+    // The release build's own key, supplied from outside the repository (the CI workflow
+    // reads it from repository secrets). Without it the benchmark build falls back to the
+    // machine's debug key, which installs but differs from machine to machine.
+    val garbyKeystore: String? = System.getenv("GARBY_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+    signingConfigs {
+        if (garbyKeystore != null) {
+            create("garby") {
+                storeFile = file(garbyKeystore)
+                storeType = "pkcs12"
+                storePassword = System.getenv("GARBY_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("GARBY_KEY_ALIAS") ?: "garby"
+                keyPassword = System.getenv("GARBY_KEYSTORE_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -34,7 +50,7 @@ android {
             // Installable, release-equivalent local performance build. Production release
             // signing stays external; the development key is only for device verification.
             initWith(getByName("release"))
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (garbyKeystore != null) "garby" else "debug")
             isDebuggable = false
             matchingFallbacks += "release"
         }

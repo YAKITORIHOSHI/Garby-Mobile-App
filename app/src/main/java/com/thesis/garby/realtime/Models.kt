@@ -20,6 +20,9 @@ enum class RobotState(val wireValue: String) {
     Outbound("OUTBOUND"),
     AtDestination("AT_DESTINATION"),
     Returning("RETURNING"),
+
+    /** Driving back along an interrupted route to where it started (Reverse to start). */
+    Reversing("REVERSING"),
     Fault("FAULT"),
     Unknown("UNKNOWN");
 

@@ -20,7 +20,15 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,16 +36,28 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.thesis.garby.firestore.AuthState
 import com.thesis.garby.firestore.AuthViewModel
 import com.thesis.garby.notifications.GarbyNotificationHelper
 import com.thesis.garby.performance.LocalPerformanceProfile
+import com.thesis.garby.realtime.OperatorAction
+import com.thesis.garby.realtime.OperatorCommandStatus
+import com.thesis.garby.realtime.isFresh
+import com.thesis.garby.ui.GarbyBottomBar
+import com.thesis.garby.ui.GarbyTab
+import com.thesis.garby.ui.glass.tabEnter
+import com.thesis.garby.ui.glass.tabExit
 import com.thesis.garby.ui.hideSystemBars
+import com.thesis.garby.ui.stopButtonState
 import com.thesis.garby.ui.theme.GarbyTheme
 
 class MainActivity : ComponentActivity() {
@@ -100,17 +120,14 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private object Routes {
-    const val DASHBOARD = "dashboard"
-    const val RETURN = "return"
-}
-
 @Composable
 fun GarbyApp(notificationOpens: Int) {
     val reducedEffects = LocalPerformanceProfile.current.reducedEffects
     val authViewModel: AuthViewModel = viewModel()
     // Activity-scoped: a return request stays tracked while the operator moves between screens.
     val returnViewModel: ReturnViewModel = viewModel()
+    // Activity-scoped too: the stop button under every tab and the Controls tab share it.
+    val operatorViewModel: OperatorViewModel = viewModel()
     val authState by authViewModel.authState.collectAsStateWithLifecycle()
     val authError by authViewModel.signInError.collectAsStateWithLifecycle()
     val signingIn by authViewModel.isSigningIn.collectAsStateWithLifecycle()
@@ -125,7 +142,9 @@ fun GarbyApp(notificationOpens: Int) {
         targetState = authState is AuthState.Authenticated,
         transitionSpec = {
             if (reducedEffects) EnterTransition.None togetherWith ExitTransition.None
-            else fadeIn(tween(420)) togetherWith fadeOut(tween(260))
+            // Signing in: the app grows into place while the start screen lets go.
+            else (fadeIn(tween(320)) + scaleIn(tween(420), initialScale = 0.94f)) togetherWith
+                (fadeOut(tween(200)) + scaleOut(tween(260), targetScale = 1.04f))
         },
         modifier = Modifier.fillMaxSize(),
         label = "authenticated"
@@ -133,8 +152,10 @@ fun GarbyApp(notificationOpens: Int) {
         if (authenticated) {
             GarbyNavHost(
                 returnViewModel = returnViewModel,
+                operatorViewModel = operatorViewModel,
                 onSignOut = {
                     returnViewModel.onSignedOut()
+                    operatorViewModel.onSignedOut()
                     authViewModel.signOut()
                 }
             )
@@ -148,48 +169,92 @@ fun GarbyApp(notificationOpens: Int) {
     }
 }
 
+/**
+ * The four tabs above one bottom bar. A tab change slides the way the bar does (GlassMotion.kt);
+ * each tab keeps its own state, and Back from any tab returns to Home.
+ */
 @Composable
 private fun GarbyNavHost(
     returnViewModel: ReturnViewModel,
+    operatorViewModel: OperatorViewModel,
     onSignOut: () -> Unit
 ) {
     val navController = rememberNavController()
     val reducedEffects = LocalPerformanceProfile.current.reducedEffects
-    NavHost(
-        navController = navController,
-        startDestination = Routes.DASHBOARD,
-        modifier = Modifier.fillMaxSize(),
-        // Every screen draws the same backdrop, so a fade-through reads as the glass changing.
-        enterTransition = {
-            if (reducedEffects) EnterTransition.None
-            else fadeIn(tween(280)) + scaleIn(tween(280), initialScale = 0.97f)
-        },
-        exitTransition = { if (reducedEffects) ExitTransition.None else fadeOut(tween(200)) },
-        popEnterTransition = { if (reducedEffects) EnterTransition.None else fadeIn(tween(280)) },
-        popExitTransition = {
-            if (reducedEffects) ExitTransition.None
-            else fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.97f)
-        }
-    ) {
-        composable(Routes.DASHBOARD) {
-            MainDashboard(
-                returnViewModel = returnViewModel,
-                onOpenReturn = {
-                    navController.navigate(Routes.RETURN) { launchSingleTop = true }
-                },
-                onSignOut = onSignOut
-            )
-        }
-        composable(Routes.RETURN) { entry ->
-            ReturnScreen(
-                viewModel = returnViewModel,
-                onBack = {
-                    // Ignore a second tap while the exit animation runs.
-                    if (entry.lifecycle.currentState == Lifecycle.State.RESUMED) {
-                        navController.popBackStack()
-                    }
-                }
-            )
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner, operatorViewModel) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            operatorViewModel.observeWhileVisible()
         }
     }
+    val operator by operatorViewModel.uiState.collectAsStateWithLifecycle()
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val selected = GarbyTab.fromRoute(backStackEntry?.destination?.route)
+
+    fun open(tab: GarbyTab) {
+        navController.navigate(tab.route) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                // The bar below owns the bottom inset; the screens must not add it again.
+                .consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+        ) {
+            NavHost(
+                navController = navController,
+                startDestination = GarbyTab.Home.route,
+                modifier = Modifier.fillMaxSize(),
+                enterTransition = {
+                    tabEnter(tabIndex(initialState.destination.route), tabIndex(targetState.destination.route), reducedEffects)
+                },
+                exitTransition = {
+                    tabExit(tabIndex(initialState.destination.route), tabIndex(targetState.destination.route), reducedEffects)
+                },
+                popEnterTransition = {
+                    tabEnter(tabIndex(initialState.destination.route), tabIndex(targetState.destination.route), reducedEffects)
+                },
+                popExitTransition = {
+                    tabExit(tabIndex(initialState.destination.route), tabIndex(targetState.destination.route), reducedEffects)
+                }
+            ) {
+                composable(GarbyTab.Home.route) {
+                    MainDashboard(
+                        returnViewModel = returnViewModel,
+                        onOpenReturn = { open(GarbyTab.Activity) },
+                        onSignOut = onSignOut
+                    )
+                }
+                composable(GarbyTab.Map.route) { MapScreen(viewModel = operatorViewModel) }
+                composable(GarbyTab.Controls.route) { ControlsScreen(viewModel = operatorViewModel) }
+                composable(GarbyTab.Activity.route) {
+                    ReturnScreen(viewModel = returnViewModel, onBack = { open(GarbyTab.Home) })
+                }
+            }
+        }
+        val stopCommand = operator.command?.takeIf { it.action == OperatorAction.Estop.wire }
+        GarbyBottomBar(
+            selected = selected,
+            onSelect = ::open,
+            stopState = stopButtonState(
+                emergencyStopped = operator.status?.emergencyStopped,
+                statusFresh = operator.status.isFresh(operator.nowMs),
+                sendingStop = operator.sending == OperatorAction.Estop,
+                stopRequestOpen = stopCommand != null && (
+                    stopCommand.status == OperatorCommandStatus.Pending ||
+                        stopCommand.status == OperatorCommandStatus.Claimed
+                    ) && operator.nowMs - stopCommand.requestedAtMs < 30_000L,
+                online = operator.online
+            ),
+            onStop = { operatorViewModel.send(OperatorAction.Estop) }
+        )
+    }
 }
+
+private fun tabIndex(route: String?): Int = GarbyTab.fromRoute(route).ordinal
