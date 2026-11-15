@@ -8,6 +8,7 @@ import com.thesis.garby.network.NetworkConnectivityManager
 import com.thesis.garby.performance.GarbyDispatchers
 import com.thesis.garby.realtime.GarbyRealtimeDb
 import com.thesis.garby.realtime.MapFrame
+import com.thesis.garby.realtime.MapLease
 import com.thesis.garby.realtime.OperatorAction
 import com.thesis.garby.realtime.OperatorCommand
 import com.thesis.garby.realtime.OperatorDb
@@ -39,7 +40,11 @@ data class OperatorUiState(
     val nowMs: Long = System.currentTimeMillis(),
     val online: Boolean = true,
     val sending: OperatorAction? = null,
-    val notice: String? = null
+    val notice: String? = null,
+    /** This phone's account ID: what the owner adds to the robot's operator list. */
+    val uid: String = "",
+    /** The database refused this phone's map lease: it is not on the operator list. */
+    val mapRefused: Boolean = false
 )
 
 /**
@@ -77,7 +82,10 @@ class OperatorViewModel : ViewModel() {
         launch {
             while (true) {
                 _uiState.update {
-                    it.copy(nowMs = now(), online = NetworkConnectivityManager.isNetworkConnected())
+                    it.copy(
+                        nowMs = now(), online = NetworkConnectivityManager.isNetworkConnected(),
+                        uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+                    )
                 }
                 delay(1_000L.milliseconds)
             }
@@ -89,7 +97,11 @@ class OperatorViewModel : ViewModel() {
         launch(GarbyDispatchers.background) {
             while (true) {
                 val uid = FirebaseAuth.getInstance().currentUser?.uid
-                if (!uid.isNullOrBlank()) OperatorDb.renewMapLease(deviceId, uid)
+                val lease = if (uid.isNullOrBlank()) MapLease.Failed else OperatorDb.renewMapLease(deviceId, uid)
+                // A failed write says nothing about the list; keep the last answer.
+                if (lease != MapLease.Failed) {
+                    _uiState.update { it.copy(mapRefused = lease == MapLease.NotAnOperator) }
+                }
                 delay(OperatorLimits.MAP_LEASE_RENEW_MS.milliseconds)
             }
         }

@@ -1,5 +1,26 @@
 # GARBY Mobile App - Patch Notes
 
+## Phone control and the LiDAR map — 2026-11-15
+
+- **Bottom navigation:** Home, Map, Controls, Activity, with an emergency stop button above the
+  tabs on every screen. Screen changes slide the way the bar moves and settle with a spring;
+  cards show moving glass skeletons until their data arrives; the map has a radar-sweep loader.
+  All motion is off on the conservative performance profile.
+- **Controls:** Release stop, Continue run, Reverse to start, obstacle sonar, front/rear LiDAR
+  read-only and restart, enabled from the Pi's confirmed state and sent through the Pi's own
+  gate. Needs robot software `PHONE-20261114` and controller firmware `REVERSE-20261114` for
+  Reverse.
+- **Map:** the Pi's LiDAR frame with likely people (red), moving objects (amber) and objects
+  between the walls (orange). Published by the Pi only while the tab is open.
+- **Operator list:** only listed phones may send requests or open the map lease. A phone that is
+  not listed is told so on Controls and on Map, and Controls shows its ID for the list.
+- **Robot state:** "Driving back to the start" for the new reversing state.
+- **Build:** a GitHub Actions workflow runs the static checker, the unit tests, lint and builds
+  the installable APK. The APK is signed with the app's own key when the repository secrets are
+  set. That key is new: an APK signed with it does not install over the earlier
+  development-signed APK, so uninstall the old app once.
+- Version code 7, "Most Latest · Phone Control". Not yet run on a phone against the robot.
+
 ## GarbyMostLatest-Test2 — 2026-11-14
 
 - Integrates the confirmed manual-disposal feature below. A late matching cloud report now

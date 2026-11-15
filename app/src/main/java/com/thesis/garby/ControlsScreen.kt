@@ -181,6 +181,9 @@ fun ControlsScreen(viewModel: OperatorViewModel) {
                         if (fresh && status != null && status.software.isNotBlank()) {
                             Hint("Robot software ${status.software}, running ${status.launcherMode}.")
                         }
+                        if (state.uid.isNotBlank()) {
+                            Hint("This phone's ID, for GARBY's operator list: ${state.uid}")
+                        }
                     }
                 }
             }

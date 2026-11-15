@@ -29,6 +29,9 @@ backend. Backend implementation and optional cross-repository contract checks be
 | `RASPI/VALUES/...` | Legacy sensor paths, read only while a device record is absent |
 | `devices/garby-bin-01/commands/reset` | The latest return request and the Pi's outcome |
 | `devices/garby-bin-01/commands/dispose` | Latest manual-disposal request and matching executor acceptance/rejection |
+| `devices/garby-bin-01/operator` | The Pi's mirror of its Controls tab: confirmed stop state, what is allowed, sonar, read-only, hold reason, route step, `updatedAt` |
+| `devices/garby-bin-01/commands/operator` | The latest operator request and the Pi's outcome (`claimed`, `accepted`, `failed`, `unconfirmed`, `reason`) |
+| `devices/garby-bin-01/map/frame` | One LiDAR frame (360 distances, markers, zones), only while a phone holds the map lease |
 
 ## What the app writes
 
@@ -36,6 +39,8 @@ backend. Backend implementation and optional cross-repository contract checks be
 | --- | --- |
 | `devices/garby-bin-01/commands/reset/{requestedAt, requestedBy, status, ackAt, doneAt, failedAt, reason}` | One operator-confirmed return: server-timestamp `requestedAt`, the operator's anonymous UID, `pending`, prior outcome fields cleared |
 | `devices/garby-bin-01/commands/dispose` | One confirmed transaction: `version: 1`, random 32-hex `requestId`, server `requestedAt`, authenticated UID `requestedBy`, `status: pending`; refuses replacing unresolved requests |
+| `devices/garby-bin-01/commands/operator` | One operator action in a transaction: `version: 1`, random 32-hex `requestId`, server `requestedAt`, `requestedBy`, `action`, `status: pending`. It never replaces a request the Pi is still handling, except with an emergency stop |
+| `devices/garby-bin-01/commands/map` | `{leaseAt: server time, by: uid}` every 20 s while the Map tab is open |
 | `devices/garby-bin-01/fcmInstallationId`, `fcmInstallationIdUpdatedAt` | After sign-in: the Firebase Installation ID used by FCM |
 
 The app no longer writes `APP/fcmToken`, `devices/<id>/fcmToken` or `RASPI/fcmToken` (FCM
@@ -95,3 +100,21 @@ over 30 seconds old or more than 5 seconds in the future and claims each one bef
 one START. A restart only queries the controller ID recorded in the claim. A matching MCU
 ACK means `accepted`, not arrival; after 15 seconds without confirmation the claim becomes
 `unconfirmed`. Return requests retain their separate path and behavior.
+
+## Operator control rules — 2026-11-15
+
+Sign-in is anonymous, and the APK is public. Without an allow-list anyone who installs the app
+could stop, release or restart the robot. `firebase/manual-disposal.rules.example.json` therefore
+allows writes to `commands/operator` and `commands/map` only when
+`operators/<uid>` is `true`, validates every field of a request (the action must be one of the
+eleven the Pi knows, `requestedAt` must be the server's `now`, `requestedBy` must be the
+caller), makes `operator` and `map/frame` read-only for clients, and lets a phone read only its
+own entry under `operators`.
+
+To add a phone: open its **Controls** tab, read "This phone's ID" at the bottom, and add
+`operators/<that id>: true` in the Firebase console. An anonymous account's ID changes when the
+app is uninstalled or signed out, so it then has to be added again.
+
+These rules were prepared and JSON-checked here. They were **not deployed or tested against the
+live database**. Manual disposal and the return request keep their existing rules, which accept
+any signed-in account.

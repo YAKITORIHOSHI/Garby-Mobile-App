@@ -28,6 +28,20 @@ Pi monitor's emergency stop always decide whether it moves.
   stop checks still control motion. The latest request shows sent, accepted, rejected or
   delivery not confirmed; accepted does not mean arrival. Follow robot status, empty the bin
   at the collection point, then use the existing return action.
+- **Bottom bar:** Home (the dashboard), Map, Controls and Activity (the return to base), with
+  an **EMERGENCY STOP** button above the tabs on every screen. The button says what the robot's
+  controllers confirmed: sent, then stopped. It travels over the internet, so it is a
+  convenience and not a safety device: keep a way to stop the robot at the robot.
+- **Controls:** what the Pi monitor's Controls tab does, from the phone: Release stop, Continue
+  run, Reverse to start, obstacle sonar on/off, front and rear LiDAR read-only, and restart of
+  the Pi and both controllers. Each is offered only when the robot's controllers have confirmed
+  the state it needs, says why when it is not, asks for confirmation where the robot may move,
+  and shows the outcome of the last request. Only phones on the robot's operator list can send
+  them; the phone's ID is shown at the bottom of the tab.
+- **Map:** GARBY's LiDAR scan, front at the top, with a red dot for a likely person (person-sized
+  and seen moving), amber for another moving object and an orange square for an object standing
+  between the hallway walls. It is live only while the tab is open, and says "stale" as soon as
+  it is not.
 - **Notifications:** receives GARBY push messages when a sender is configured (none is
   deployed yet).
 
@@ -111,5 +125,7 @@ local disk. Robot Test1/Test2 ZIPs are distributed only from the separate
 - [FIREBASE_CONFIGURATION.md](FIREBASE_CONFIGURATION.md): Firebase project, data paths and the
   security boundaries the database rules must enforce.
 - [PATCH_NOTES.md](PATCH_NOTES.md): what changed in each version.
+- [docs/2026-11-15-phone-control.md](docs/2026-11-15-phone-control.md): phone control, the map,
+  the bottom bar, the build workflow and the signing key.
 - Robot firmware, Pi deployment and physical acceptance are maintained in the coordinated GARBY
   workspace, separately from this Android repository.

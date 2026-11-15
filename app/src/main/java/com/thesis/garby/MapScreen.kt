@@ -86,6 +86,7 @@ fun MapScreen(viewModel: OperatorViewModel) {
     val (subtitle, subtitleColor) = when {
         !state.online -> "This phone is offline" to GarbyColors.Warning
         frame != null && !stale -> "Live · ${"%.1f".format((state.nowMs - frame.atMs + frame.ageMs).coerceAtLeast(0L) / 1000f)} s old" to GarbyColors.Ok
+        state.mapRefused -> "Not on GARBY's operator list" to GarbyColors.Warning
         frame != null -> "Stale: last scan ${((state.nowMs - frame.atMs) / 1000L).coerceAtLeast(0L)} s ago" to GarbyColors.Warning
         !piReporting && state.statusLoaded -> "GARBY's Pi is not reporting" to GarbyColors.Warning
         else -> "Waiting for the first scan" to GarbyColors.TextMuted
@@ -108,8 +109,11 @@ fun MapScreen(viewModel: OperatorViewModel) {
                     skeleton = {
                         Box(Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
                             RadarLoader(
-                                if (state.frameLoaded && !piReporting) "GARBY is not sending scans"
-                                else "Waiting for GARBY's LiDAR"
+                                when {
+                                    state.mapRefused -> "Not on GARBY's operator list: this phone's ID is on Controls"
+                                    state.frameLoaded && !piReporting -> "GARBY is not sending scans"
+                                    else -> "Waiting for GARBY's LiDAR"
+                                }
                             )
                         }
                     }

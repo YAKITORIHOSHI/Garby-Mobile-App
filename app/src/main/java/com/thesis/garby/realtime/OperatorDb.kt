@@ -3,6 +3,7 @@ package com.thesis.garby.realtime
 import android.util.Log
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.MutableData
 import com.google.firebase.database.ServerValue
@@ -15,6 +16,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -22,7 +24,6 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
 
 /** What became of a request this phone tried to write. */
@@ -32,6 +33,9 @@ sealed interface OperatorSubmission {
     data class Unconfirmed(val message: String) : OperatorSubmission
 }
 
+/** What one map lease renewal achieved. */
+enum class MapLease { Held, NotAnOperator, Failed }
+
 /**
  * Realtime Database access for phone control and the LiDAR map. Listeners live only while a
  * screen collects them; the map lease is written only while the map is on screen.
@@ -39,6 +43,11 @@ sealed interface OperatorSubmission {
 object OperatorDb {
     private const val TAG = "GarbyOperator"
     private val validDeviceId = Regex("^[A-Za-z0-9_-]{1,64}$")
+
+    /** The database rules accept requests and map leases only from listed accounts. */
+    const val NOT_AN_OPERATOR =
+        "This phone is not on GARBY's operator list. Nothing was sent. Its ID is at the bottom " +
+            "of Controls; the owner adds it in the Firebase console."
 
     private val database by lazy {
         try {
@@ -158,19 +167,39 @@ object OperatorDb {
         )
     }
 
-    /** Tell the Pi somebody is watching the map. Failure only means no frames arrive. */
-    suspend fun renewMapLease(deviceId: String, uid: String) {
+    /**
+     * Tell the Pi somebody is watching the map. Failure only means no frames arrive, and a write
+     * that times out never ends the caller's renewal loop.
+     */
+    suspend fun renewMapLease(deviceId: String, uid: String): MapLease {
         requireValid(deviceId)
-        try {
+        return try {
             withTimeout(RtdbConstants.WRITE_TIMEOUT_MS.milliseconds) {
-                database.getReference("devices/$deviceId/commands/map")
-                    .setValue(mapOf("leaseAt" to ServerValue.TIMESTAMP, "by" to uid)).await()
+                suspendCancellableCoroutine<MapLease> { continuation ->
+                    database.getReference("devices/$deviceId/commands/map").setValue(
+                        mapOf("leaseAt" to ServerValue.TIMESTAMP, "by" to uid),
+                        DatabaseReference.CompletionListener { error, _ ->
+                            if (error != null) Log.w(TAG, "Map lease not renewed: ${error.message}")
+                            if (continuation.isActive) continuation.resume(leaseOutcome(error))
+                        }
+                    )
+                }
             }
+        } catch (_: TimeoutCancellationException) {
+            Log.w(TAG, "Map lease not confirmed in time")
+            MapLease.Failed
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
             Log.w(TAG, "Map lease not renewed", error)
+            MapLease.Failed
         }
+    }
+
+    private fun leaseOutcome(error: DatabaseError?): MapLease = when {
+        error == null -> MapLease.Held
+        error.code == DatabaseError.PERMISSION_DENIED -> MapLease.NotAnOperator
+        else -> MapLease.Failed
     }
 
     /**
@@ -214,6 +243,9 @@ object OperatorDb {
                         override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {
                             if (!continuation.isActive) return
                             when {
+                                // Refused by the rules: nothing reached GARBY.
+                                error?.code == DatabaseError.PERMISSION_DENIED ->
+                                    continuation.resume(OperatorSubmission.NotSent(NOT_AN_OPERATOR))
                                 error != null -> continuation.resumeWithException(error.toException())
                                 !committed -> continuation.resume(OperatorSubmission.NotSent(
                                     "GARBY is still handling the previous request. Nothing was sent."))
@@ -227,7 +259,7 @@ object OperatorDb {
                 }
             }
         } catch (error: CancellationException) {
-            if (error !is kotlinx.coroutines.TimeoutCancellationException) throw error
+            if (error !is TimeoutCancellationException) throw error
         } catch (error: Exception) {
             Log.w(TAG, "Operator request failed", error)
         }
