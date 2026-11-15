@@ -16,8 +16,8 @@
   not listed is told so on Controls and on Map, and Controls shows its ID for the list.
 - **Robot state:** "Driving back to the start" for the new reversing state.
 - **Build:** a GitHub Actions workflow on `main` runs the static checker, the unit tests and
-  lint, and builds the release APK signed with the app's persistent release key (alias `garby`,
-  certificate SHA-256 `c7466d41…4edae261`). It fails rather than sign with any other key. That
+  lint, and builds the release APK signed with the app's persistent release key (alias
+  `garby-release`, certificate SHA-256 `753c3352…f818e5d7`). It fails rather than sign with any other key. That
   key is new: the first APK signed with it does not install over the earlier
   development-signed APK, so uninstall the old app once; later releases update in place.
 - Version code 7, "Most Latest · Phone Control". Not yet run on a phone against the robot.

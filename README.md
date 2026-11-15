@@ -75,7 +75,7 @@ Outputs are in `app/build/outputs/apk/`. If this checkout is on a network share,
 
 **Releases.** Every push to `main` runs `.github/workflows/android.yml`: static checks, unit
 tests, lint and the release APK, signed with the app's persistent release key from the
-repository secrets (alias `garby`, certificate SHA-256 `c7:46:6d:41:…:e2:61`). The build fails
+repository secrets (alias `garby-release`, certificate SHA-256 `75:3c:33:52:…:e5:d7`). The build fails
 when the key is missing or different, so every published APK updates the installed app in
 place. Raise `versionCode` in `app/build.gradle.kts` for each release.
 The `benchmark` APK uses the local development signing key, runs without debug instrumentation,

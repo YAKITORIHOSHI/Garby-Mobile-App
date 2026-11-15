@@ -120,7 +120,8 @@ for relative, required in disposal_sources.items():
 WORKFLOW = ROOT / ".github/workflows/android.yml"
 workflow_text = WORKFLOW.read_text(encoding="utf-8") if WORKFLOW.is_file() else ""
 for marker in [
-    "GARBY_RELEASE_CERT_SHA256: c7466d41c7cc87c5812e44235ff3714326f0726751a1be22baa112bc4edae261",
+    "GARBY_RELEASE_CERT_SHA256: 753c3352ac396e1a006f11ccb1a30e06f5bf990a9f94c0414469950af818e5d7",
+    "GARBY_KEY_ALIAS: garby-release",
     "secrets.GARBY_KEYSTORE_BASE64",
     ":app:assembleRelease",
     'apksigner" verify',

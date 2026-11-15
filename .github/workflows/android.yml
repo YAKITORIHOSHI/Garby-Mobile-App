@@ -19,9 +19,9 @@ concurrency:
 env:
   # The release certificate's SHA-256 (public: it is inside every APK). A different key would
   # force every phone to uninstall the app first, so the build refuses one.
-  GARBY_RELEASE_CERT_SHA256: c7466d41c7cc87c5812e44235ff3714326f0726751a1be22baa112bc4edae261
-  # The key's alias inside the PKCS12 keystore. One password opens the store and the key.
-  GARBY_KEY_ALIAS: garby
+  GARBY_RELEASE_CERT_SHA256: 753c3352ac396e1a006f11ccb1a30e06f5bf990a9f94c0414469950af818e5d7
+  # The key's alias inside the PKCS12 keystore. The keystore password also opens the key.
+  GARBY_KEY_ALIAS: garby-release
 
 jobs:
   build:

@@ -80,11 +80,11 @@ The release APK is signed with the app's persistent release key, from two reposi
 
 | Key | Value |
 | --- | --- |
-| Alias | `garby` (the keystore file is called `garby-release.p12`; its key's alias is `garby`) |
-| Certificate | `CN=GARBY Mobile App, O=GARBY Thesis`, valid until 2056-11-07 |
-| Certificate SHA-256 | `c7466d41c7cc87c5812e44235ff3714326f0726751a1be22baa112bc4edae261` |
+| Alias | `garby-release` |
+| Certificate SHA-256 | `753c3352ac396e1a006f11ccb1a30e06f5bf990a9f94c0414469950af818e5d7` |
 
-The keystore was created on the robot's Pi and is kept outside both repositories. The workflow
+The keystore (created 2026-11-15) is the owner's and is kept outside both repositories. Keep a
+backup of it and its password: without them no later APK can update the installed app. The workflow
 never signs with anything else: it stops with an error when a secret is missing, when the alias
 is not in the keystore, when the password does not open it, or when the key's certificate is not
 the one above, and it checks the finished APK with `apksigner` against the same certificate. The

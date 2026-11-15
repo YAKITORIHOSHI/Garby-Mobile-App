@@ -24,8 +24,8 @@ android {
     }
 
     // The app's persistent release key, supplied from outside the repository: the CI workflow
-    // decodes it from repository secrets into GARBY_KEYSTORE_FILE. It is a PKCS12 keystore, so
-    // one password opens both the store and the key; the key's alias is "garby". Every release
+    // decodes it from repository secrets into GARBY_KEYSTORE_FILE. It is a PKCS12 keystore whose
+    // password also opens the key; the key's alias is "garby-release". Every release
     // must carry this key, or phones cannot update the app in place. Without it the release
     // build stays unsigned (no key is ever made up for it); only the local benchmark build
     // below falls back to this machine's debug key, for device checks.
@@ -36,7 +36,7 @@ android {
                 storeFile = file(garbyKeystore)
                 storeType = "pkcs12"
                 storePassword = System.getenv("GARBY_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("GARBY_KEY_ALIAS") ?: "garby"
+                keyAlias = System.getenv("GARBY_KEY_ALIAS") ?: "garby-release"
                 keyPassword = System.getenv("GARBY_KEYSTORE_PASSWORD")
             }
         }

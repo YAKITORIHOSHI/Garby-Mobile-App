@@ -196,7 +196,7 @@ fit in one run.
 The Android repository runs its own unit tests, assembly and lint. Optional interoperability
 checks in the separate robot repository can use an external app checkout. Here,
 `python -B tools/static_quality_check.py` checks release invariants without an Android SDK.
-Release assembly is signed with the persistent release key (alias `garby`) when
+Release assembly is signed with the persistent release key (alias `garby-release`) when
 `GARBY_KEYSTORE_FILE` supplies it, as the CI workflow does from repository secrets, and is
 unsigned otherwise; no build makes up a release key.
 
