@@ -11,11 +11,43 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.advanceTimeBy
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MonitoringFlowTest {
+    @Test
+    fun threeScreensShareOneClockAndTheClockStopsWithTheLastObserver() = runTest {
+        var reads = 0
+        val clock = monitoringClock { reads++; testScheduler.currentTime }
+            .shareWhileObserved(backgroundScope)
+        val seen = List(3) { mutableListOf<Long>() }
+        val collectors = seen.map { values ->
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+                clock.collect { values.add(it) }
+            }
+        }
+        runCurrent()
+        assertEquals(1, reads)
+        advanceTimeBy(3_001)
+        runCurrent()
+        assertEquals(4, reads) // one producer, not one timer for each screen
+        seen.forEach { assertEquals(listOf(0L, 1_000L, 2_000L, 3_000L), it) }
+        collectors.forEach { it.cancel() }
+        runCurrent()
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertEquals(4, reads)
+        val resumed = mutableListOf<Long>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            clock.collect { resumed.add(it) }
+        }
+        runCurrent()
+        assertEquals(listOf(testScheduler.currentTime), resumed) // no stale replay on resume
+        assertEquals(5, reads)
+    }
+
     @Test
     fun slowObserverSkipsObsoleteTelemetryDuringABurst() = runTest {
         val startBurst = CompletableDeferred<Unit>()

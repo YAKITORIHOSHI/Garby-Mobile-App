@@ -1,0 +1,43 @@
+[
+  {
+    "command": [
+      "python3",
+      "-B",
+      "tools/static_quality_check.py"
+    ],
+    "exit_code": 0,
+    "log": "static-quality.log"
+  },
+  {
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "exit_code": 0,
+    "log": "diff-check.log"
+  },
+  {
+    "command": "compare exact source delta and preserved file hashes",
+    "exit_code": 0,
+    "log": "scope-checks.log"
+  },
+  {
+    "command": [
+      "bash",
+      "gradlew",
+      ":app:compileBenchmarkKotlin",
+      ":app:lintBenchmark",
+      "--no-daemon"
+    ],
+    "exit_code": 1,
+    "log": "gradle.log",
+    "GRADLE_USER_HOME": "/tmp/garby-floating-scroll-gradle",
+    "status": "could not start: Gradle download denied"
+  },
+  {
+    "command": "Android on-phone visual/scroll check",
+    "status": "not run",
+    "reason": "No Android SDK/ADB or connected phone available here"
+  }
+]

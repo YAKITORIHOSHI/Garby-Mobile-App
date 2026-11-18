@@ -5,6 +5,134 @@ This Android repository describes its Firebase integration here and in
 [FIREBASE_CONFIGURATION.md](FIREBASE_CONFIGURATION.md). Live Firebase and hardware remain
 external acceptance items.
 
+## Map, controls and arrivals — 2026-11-17
+
+The activity-scoped AuthViewModel observes the existing process-wide validated-network
+StateFlow throughout the app lifecycle. `watchSessionInternet` confirms an offline transition
+for three seconds; online recovery cancels that pending action. Confirmed offline state ends
+the local session, clears the registered operator/return ViewModel state, cancels a pending
+sign-in and routes to Connect. The owner selected retention of the phone's approved Firebase
+identity: outage handling closes the local app session without FirebaseAuth.signOut.
+An explicit Sign out still uses the existing Firebase sign-out behavior. Cleanup callbacks are
+registered by authenticated composition and removed on disposal. Rotation alone does not end
+the session. A late auth completion is refused until a new deliberate Connect, and Connect
+is disabled while Android reports no validated internet. Reconnection never auto-signs in.
+This is network callback processing plus a cancellable one-shot delay, not periodic probing.
+Callbacks use the delivered NetworkCapabilities rather than synchronously querying Android
+inside a callback. A current-network check ignores late loss/capability events from the previous
+default network during a handoff. INTERNET and VALIDATED are required; Wi-Fi alone is insufficient.
+
+Home has a separate Current activity card. `RobotActivity.kt` projects the existing fresh
+operator mirror into execution labels; it does not participate in any command gate. Pi/cloud/
+phone/MCU availability is checked before displaying live activity. Confirmed emergency stop and
+route fault take priority; on active routes a reported hold is Blocked, and a turn leg from
+`station_mode.RouteLeg.describe()` is Turning. The explicit parking alignment message is also
+Turning. Otherwise active routes show Running; IDLE and completed outbound show Idle and Parked.
+Neither IDLE nor Running proves physical wheel movement or location. Unknown reports are explicit.
+
+`OperatorViewModel.activityState` maps/deduplicates on the existing bounded background dispatcher
+and is shared only while observed. The small Home card collects it separately; navigation and
+the grid do not collect full operator state. It reuses the existing operator listener and clock.
+
+The Map loading area is centered in a full-width host, its text uses centered alignment, and
+the Range controls use a centered wrapping FlowRow with radio selection semantics. The small
+radar progress sweep is an explicit exception to still loading on reduced-effects devices,
+requested by the owner. It runs only while waiting on a RESUMED Map lifecycle, with phase read
+in the drawing callback and cached geometry/brushes. Live data and ten-second sleep remove it.
+Range limits, map size, lease lifecycle and scroll-under-bar behavior are unchanged.
+
+`MainDashboard` has no return dock. `ReturnScreen` is the Activity tab and owns an inline
+Send back to base card, its confirmation, readiness checks and progress.
+
+`MapScreen` limits the drawing to 320 dp without changing the 2/4/8 m ranges or the 360
+returns. `drawWithCache` retains geometry only for the current frame/range/display size.
+`observeMapSession` waits ten seconds for a different, valid, fresh frame; duplicates,
+malformed and stale data cannot extend that wait. It then cancels the full scan collector,
+clears the displayed `MapFrame`, removes the drawing/loader, and listens only to `map/frame/at`.
+A new fresh timestamp reattaches the full listener. The 20 s publication lease remains active
+while Map is visible so a recovering Pi can send the next scan. Screen/lifecycle cancellation
+releases both listeners and the decoded frame. A listener error leaves a static retry message.
+
+The phone stop needs a Firebase connection, phone internet and a Pi operator mirror no older
+than 30 s with `connected` and `supported` true. The Pi derives `supported` from a fresh executor
+operator report (7.5 s locally). The displayed button and the send gate use these conditions;
+unknown/stale state disables it. Once online, stop can preempt a pending action. The Pi/MCU stop
+latch and their acceptance of stop commands retain their existing behavior.
+
+`DeviceStatus` decodes `location` (POINT_A/POINT_B/IN_TRANSIT/UNKNOWN), `locationUpdatedAt`, and
+`lastArrival {point, confirmedAt}`. A completed outbound confirms point B/disposal area. The
+executor's separate RETURN COMPLETE report confirms point A/station and is replayed with IDLE
+after reconnect. Generic IDLE does not prove arrival. The last arrival is historical while
+current location can become in transit or unknown. This is route-completion telemetry from
+open-loop travel, not an independently measured physical position.
+
+## Controls presentation — 2026-11-17
+
+`ControlsScreen.kt` keeps the original GARBY red/rose palette for Controls and Developer,
+opaque foreground text, explicit status labels, outlined insets and bright selected sections.
+The UI is split into a state-bound `ControlsScreen` and previewable `ControlsContent`. The latter
+receives the existing three-argument `OperatorViewModel.send` callback and notice dismissal.
+Its `ControlButton` uses the same enabled/loading state and command gate as before.
+
+Glass surfaces cache static gradients and edge reflections; the page does not decode a backdrop
+bitmap or allocate live-blur/shader targets. Button feedback is only on interaction, and the
+conservative performance profile skips shadows and scale animation. Sensor/speed selectors
+wrap and expose checkbox/radio semantics; action labels wrap rather than being ellipsized.
+Existing action IDs, confirmations, request payloads and motion behavior are unchanged.
+
+Android Studio previews cover Controls, Developer and 1.5× text. A separately rendered vector
+layout reference is labelled as a design reference; it is not Android runtime evidence.
+
+## Controls gating — 2026-11-18
+
+Every enabled/disabled decision is `operatorBlockReason` in `realtime/OperatorModels.kt`, and
+each mirrors the Pi function the request reaches. Controls-section actions use the mirror's
+`can*` flags. Developer tests and nudges use the Pi's `developerEnabled`, showing its
+`developerBlocked` reason; RunStart uses `developerRun` the way the Pi's RunStart tab does
+(Continue at start/part-way, Reverse at part-way/end, either also while the stop is latched and
+`canRelease`; Discard whenever a saved list is not moving; Start run unless a list moves or
+stands part-way). The editor's rows are checked by `checkRunDraft` with the Pi window's rules
+and words, kept across rotation as `encodeRunDraft` text, and sent by
+`OperatorViewModel.startRun` as `program`/`speed`/`accel` on `DEV_RUN_START` only. Buttons side
+by side share one height (`ActionButtons`, `IntrinsicSize.Min`). `DevCancel`/`DevHoldStop` are never
+held back by a pending request and may replace an unfinished `DEV_*` request
+(`canReplaceOperatorCommand`). `requestFields` puts `sensors` only on `DEV_TEST_*` and `fast`
+only on the four nudges. A Developer request is `accepted` when the Pi took it; how it went is
+in `developerMessage`/`developerResult`. Phone arrows are Pi-timed 0.6 s nudges.
+
+## App-wide monitoring and floating navigation — 2026-11-17
+
+`GarbyRealtimeDb.monitoringTimeMs` shares `monitoringClock` from `MonitoringFlow.kt` with
+`shareWhileObserved`: one conflated one-second producer, stopped when its final observer
+leaves and with replay cleared. `OperatorViewModel` and `ReturnViewModel` consume that clock;
+`DeviceViewModel` selects one sample per five-second freshness bucket. Epoch ages and every
+staleness/command window retain their existing limits. Return state and summary use zero
+unsubscription delay/replay expiry; tracked request identity remains in SavedStateHandle.
+
+The operator monitor subscribes to the existing validated-network StateFlow and a bounded
+Firebase AuthStateListener callback flow. Its former one-second loop no longer queries Android
+connectivity or the current user on the main thread. Command submission still performs the
+existing current-time/network/auth checks; incoming reports and acknowledgements are not delayed.
+
+`stopButtonStates` maps operator snapshots to the existing stop-state rules and suppresses
+unchanged results. Only `FloatingOperatorDock` collects that projection. `GarbyNavHost` never
+collects full operator state, so ordinary map frames and clock ticks do not invalidate navigation.
+The overlay dock's measured height is supplied by `LocalFloatingDockInset`; GlassScaffold and
+the Controls frame add it to content padding while backgrounds fill the whole page. The dock's
+outer box is transparent; only its rounded glass container and controls paint a background.
+The original red/rose palette and control command contracts are preserved.
+
+Map and Controls/Developer apply that padding after `verticalScroll` in their modifier
+chain. It therefore scrolls with the content instead of shrinking the viewport before the
+header or dock. Content can pass behind both floating glass bars; the initial/final padding
+still leaves the first and last items reachable. Home and Activity use lazy content padding
+for the same behavior. Neither the bars' hit targets nor their control gates change.
+
+These changes remove known shared work across device brands. They do not establish a new
+frame rate without a fresh release-build trace on a phone. Implementation follows the official
+[Compose guidance on scoped state reads](https://developer.android.com/develop/ui/compose/performance/bestpractices)
+and [coroutine sharing lifecycle](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/-sharing-started/-companion/-while-subscribed.html).
+
 ## Responsibilities
 
 Android authenticates through Firebase, shows what GARBY reports, marks old data
@@ -24,7 +152,7 @@ clearance.
 ## What the dashboard shows
 
 - **Robot state** from `devices/<id>/status/robotState`, as the Pi maps the executor's lines:
-  IDLE (at base), OUTBOUND (driving to the collection point), AT_DESTINATION (waiting there),
+  IDLE (stationary, location confirmed separately), OUTBOUND (driving to the collection point), AT_DESTINATION (waiting there),
   RETURNING, FAULT (`[ROUTE FAULT]` or `[RETURN REJECTED]`), UNKNOWN (controllers restarting or
   BLE down). A route track shows base, collection point and the robot's position by state.
 - **Presence** from the Pi heartbeat (`lastSeen`, every 30 s): live up to 90 s, then the state is
@@ -140,6 +268,20 @@ launcher icon is adaptive with a themed (monochrome) layer; the original 2000 px
 source art in `design/`.
 
 ### Low-end rendering and background work (2.0.1)
+
+The 2026-11-17 follow-up removes blocking font loads: the three bundled Montserrat resources
+use `FontLoadingStrategy.Async`, with fallback text until loading completes. The Connect page
+uses three keyed lazy sections, retaining its scroll access and spacing without `BoxWithConstraints`.
+On the conservative profile, authentication and loaded/skeleton content render directly rather
+than using `AnimatedContent` with empty transitions; tab icons omit their scale animation state
+and graphics layer. Return/operator ViewModels are created only inside authenticated content
+and retain activity ownership across tabs. This adds no polling or background worker.
+
+The owner reports lag before connecting and confirms Android Studio Run/Debug. No robot-data
+listener is active on that screen. Debug overhead is a likely contributor, not a measured sole
+cause. The existing optimized `benchmark` variant and Windows capture instructions are documented
+in [the measurement guide](docs/2026-11-17-performance-capture.md). A fresh on-phone optimized
+trace is required before claiming the remaining lag resolved; historical results are unchanged.
 
 `performance/DevicePerformance.kt` selects a stable process-wide profile from Android's low-RAM
 flag, total RAM (up to 6 GiB), heap class (up to 192 MiB), or CPU count (up to four). No brand/model

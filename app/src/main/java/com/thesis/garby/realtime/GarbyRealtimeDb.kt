@@ -121,6 +121,7 @@ object GarbyRealtimeDb {
 
     private val monitoringScope by lazy { CoroutineScope(SupervisorJob() + GarbyDispatchers.background) }
     private val sharedConnection by lazy { observeConnectionState().shareWhileObserved(monitoringScope) }
+    private val sharedMonitoringClock by lazy { monitoringClock().shareWhileObserved(monitoringScope) }
     private val sharedDeviceStatus by lazy {
         observeDeviceStatus(RtdbConstants.DEFAULT_DEVICE_ID).shareWhileObserved(monitoringScope)
     }
@@ -176,6 +177,10 @@ object GarbyRealtimeDb {
     /** One connection listener shared by the dashboard and return workflow while observed. */
     val connectionState: Flow<ConnectionState>
         get() = sharedConnection
+
+    /** Shared foreground clock; no independent screen polling loops or database requests. */
+    val monitoringTimeMs: Flow<Long>
+        get() = sharedMonitoringClock
 
     private fun observeConnectionState(): Flow<ConnectionState> = callbackFlow {
             val ref = database.getReference(".info/connected")
@@ -498,7 +503,15 @@ object GarbyRealtimeDb {
             lidarHealthy = device?.child("lidarHealthy")?.getBooleanOrNull(),
             sensorSerialConnected = device?.child("sensorSerialConnected")?.getBooleanOrNull(),
             manualDisposalReady = device?.child("manualDisposalReady")?.getBooleanOrNull(),
-            manualDisposalUpdatedAtMs = device?.child("manualDisposalUpdatedAt")?.getLongOrNull() ?: 0L
+            manualDisposalUpdatedAtMs = device?.child("manualDisposalUpdatedAt")?.getLongOrNull() ?: 0L,
+            location = RobotLocation.fromWire(device?.child("location")?.getStringOrNull()),
+            locationUpdatedAtMs = device?.child("locationUpdatedAt")?.getLongOrNull() ?: 0L,
+            lastArrival = device?.child("lastArrival")?.let { arrival ->
+                val point = RobotLocation.fromWire(arrival.child("point").getStringOrNull())
+                val at = arrival.child("confirmedAt").getLongOrNull() ?: 0L
+                if (point in listOf(RobotLocation.PointA, RobotLocation.PointB) && at > 0L)
+                    RouteArrival(checkNotNull(point), at) else null
+            }
         )
     }
 

@@ -1,0 +1,13 @@
+{
+  "command": [
+    "bash",
+    "gradlew",
+    ":app:compileBenchmarkKotlin",
+    ":app:lintBenchmark",
+    "--no-daemon"
+  ],
+  "exit_code": 1,
+  "log": "gradle.log",
+  "GRADLE_USER_HOME": "/tmp/garby-floating-scroll-gradle",
+  "status": "could not start: Gradle download denied"
+}

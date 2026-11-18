@@ -107,9 +107,18 @@ Sign-in is anonymous, and the APK is public. Without an allow-list anyone who in
 could stop, release or restart the robot. `firebase/manual-disposal.rules.example.json` therefore
 allows writes to `commands/operator` and `commands/map` only when
 `operators/<uid>` is `true`, validates every field of a request (the action must be one of the
-eleven the Pi knows, `requestedAt` must be the server's `now`, `requestedBy` must be the
+32 the Pi knows, `requestedAt` must be the server's `now`, `requestedBy` must be the
 caller), makes `operator` and `map/frame` read-only for clients, and lets a phone read only its
 own entry under `operators`.
+
+2026-11-18: the action list adds sides read-only and the Developer actions (`DEV_TEST_*`,
+`DEV_CANCEL`, `DEV_RUN_*`, `DEV_HOLD_*`) and optional fields: `sensors` (0..7, bench tests
+only), `fast` (boolean, nudges only) and, for `DEV_RUN_START` only, `program` (up to 20 steps
+such as "F4000,L980"), `speed` (2351..8000) and `accel` (100..20000). Any other field is still
+refused, which is why the app sends each only with its action. If the earlier eleven-action rules are published,
+publish this file again or side read-only and every Developer control are refused. The status
+mirror `operator` also carries `developerMessage`, `developerBlocked` and `developerRun`
+(written by the Pi; read-only for phones).
 
 To add a phone: open its **Controls** tab, read "This phone's ID" at the bottom, and add
 `operators/<that id>: true` in the Firebase console. An anonymous account's ID changes when the
@@ -118,3 +127,19 @@ app is uninstalled or signed out, so it then has to be added again.
 These rules were prepared and JSON-checked here. They were **not deployed or tested against the
 live database**. Manual disposal and the return request keep their existing rules, which accept
 any signed-in account.
+
+
+## Route endpoint reports — 2026-11-17
+
+The Pi writes these fields under `devices/garby-bin-01/status`; the app only reads them:
+
+| Field | Meaning |
+| --- | --- |
+| `location` | `POINT_B` after completed outbound, `POINT_A` after explicit completed return, `IN_TRANSIT` during motion, otherwise `UNKNOWN` when unconfirmed |
+| `isAtStation` | True only for current `POINT_A`; generic IDLE is insufficient |
+| `locationUpdatedAt` | Epoch milliseconds when the current location report changed |
+| `lastArrival` | `{point, name, confirmedAt, source}` for the last completed route endpoint; retained during travel/unknown state |
+
+The existing read permission for the status subtree covers these fields. No new client write
+permission is needed. Neither these fields nor a return-request acknowledgement grant motion.
+The phone stop is enabled only with fresh Pi/MCU status and the phone/cloud connection up.

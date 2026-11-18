@@ -1,0 +1,43 @@
+{
+  "date": "2026-11-17",
+  "commands": [
+    {
+      "command": "python3 -B tools/static_quality_check.py",
+      "exitCode": 0,
+      "log": "static-quality.log",
+      "scope": "Source-only existing app release/security checks"
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0,
+      "log": "diff-check.log"
+    },
+    {
+      "command": "env GRADLE_USER_HOME=/tmp/garby-mobile-gradle-20261117 bash gradlew --offline --no-daemon :app:testDebugUnitTest :app:compileDebugKotlin :app:lintDebug",
+      "exitCode": 1,
+      "log": "gradle.log",
+      "status": "blocked_before_compilation",
+      "reason": "Gradle distribution is not cached; wrapper download failed with java.net.SocketException: Operation not permitted."
+    }
+  ],
+  "windowsConfiguration": {
+    "local.properties": {
+      "sha256": "9fe5602b099412976a02a1f66bb733f022df4777e903c9ca3e61c40ce5ddaf11",
+      "unchanged": true
+    },
+    "settings.gradle.kts": {
+      "sha256": "d772c595bf5f0d887a66bf5444778250200cdb92c4453eb6aa1e97066fa247a8",
+      "unchanged": true
+    },
+    "gradle.properties": {
+      "sha256": "e03e85114266d406aa5ee13f9e439481d74a722fe5c3b7464f3690616e9fa8c8",
+      "unchanged": true
+    }
+  },
+  "newBehaviorTests": "MapSessionTest.kt and RobotLocationTest.kt; revised stop cases in OperatorModelsTest.kt. Not executed here because Gradle could not start.",
+  "apkBuilt": false,
+  "published": false,
+  "installedVersions": "unknown",
+  "physicalAcceptance": "not exercised",
+  "memoryMeasurements": "No on-device profiling; source releases current scan/cache and detaches full listener on idle."
+}

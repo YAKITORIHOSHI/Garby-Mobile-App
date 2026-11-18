@@ -1,0 +1,51 @@
+[
+  {
+    "command": [
+      "python3",
+      "-B",
+      "tools/static_quality_check.py"
+    ],
+    "exit_code": 0,
+    "seconds": 0.199,
+    "log": "static-quality.log"
+  },
+  {
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "exit_code": 0,
+    "seconds": 0.025,
+    "log": "diff-check.log"
+  },
+  {
+    "command": [
+      "bash",
+      "gradlew",
+      ":app:compileDebugKotlin",
+      ":app:testDebugUnitTest",
+      ":app:lintDebug",
+      ":app:assembleBenchmark",
+      "--no-daemon"
+    ],
+    "environment": {
+      "GRADLE_USER_HOME": "/tmp/garby-render-stalls-gradle"
+    },
+    "exit_code": 1,
+    "seconds": 0.473,
+    "log": "gradle.log",
+    "status": "blocked before compilation"
+  },
+  {
+    "command": "compare before/after hashes and edited-source delimiters",
+    "exit_code": 0,
+    "log": "scope-checks.log",
+    "status": "pass; not a compiler check"
+  },
+  {
+    "command": "Android UI/frame-time capture",
+    "status": "not run",
+    "reason": "No Android SDK/ADB, connected phone or built APK available here"
+  }
+]

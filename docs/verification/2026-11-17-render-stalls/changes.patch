@@ -1,0 +1,544 @@
+--- before/README.md
++++ README.md
+@@ -81,6 +81,13 @@
+ ./gradlew :app:assembleBenchmark       # minified, signed local performance-test APK
+ ```
+ 
++For everyday smoothness checks in Android Studio, open **Build Variants**, select
++**benchmark** for `app`, then use **Run**. The default **debug** variant includes development
++instrumentation and does not represent release performance. Benchmark keeps the same app ID
++and uses the supplied release key, or the local debug key when no release key is configured.
++Keep the existing signing key when updating an installed app. For Windows steps and a short
++phone frame-time capture, see [measuring app smoothness](docs/2026-11-17-performance-capture.md).
++
+ Outputs are in `app/build/outputs/apk/`. If this checkout is on a network share, add an absolute
+ `garby.buildRoot=<local folder>` to `local.properties` and outputs go there instead (see
+ `settings.gradle.kts`).
+--- before/PATCH_NOTES.md
++++ PATCH_NOTES.md
+@@ -1,4 +1,20 @@
+ # GARBY Mobile App - Patch Notes
++
++## Connect-screen rendering and debug-build diagnosis — 2026-11-17
++
++- The owner confirms lag before connecting and use of Android Studio Run/Debug. Live-data
++  polling does not explain lag on that screen; release-equivalent measurement is required.
++  The existing `benchmark` variant already provides R8 optimization without debug
++  instrumentation. The README now points Windows users to it and to a scoped frame capture.
++- Bundled Montserrat fonts load asynchronously instead of blocking first text composition.
++  The same fonts, red/rose palette and glass visuals remain; fallback text can reflow once.
++- The conservative profile bypasses authentication/loading `AnimatedContent` entirely and
++  avoids the tab icon's idle animation state/graphics layer. The Connect screen uses a lazy
++  list instead of constraint-time subcomposition and an eager scrolling column. Operator and
++  return ViewModels are created after authentication, retaining their activity scope across tabs.
++- Source changes need a fresh build on Windows. No new phone frame-rate improvement is claimed;
++  this host has no Android SDK/ADB or cached Gradle distribution. MCU upload and Pi deployment:
++  None for this follow-up. Earlier arrival-related Executor/Pi requirements remain separate.
+ 
+ ## App-wide monitoring, floating dock and original palette — 2026-11-17
+ 
+--- before/SYSTEM_ARCHITECTURE.md
++++ SYSTEM_ARCHITECTURE.md
+@@ -212,6 +212,20 @@
+ 
+ ### Low-end rendering and background work (2.0.1)
+ 
++The 2026-11-17 follow-up removes blocking font loads: the three bundled Montserrat resources
++use `FontLoadingStrategy.Async`, with fallback text until loading completes. The Connect page
++uses three keyed lazy sections, retaining its scroll access and spacing without `BoxWithConstraints`.
++On the conservative profile, authentication and loaded/skeleton content render directly rather
++than using `AnimatedContent` with empty transitions; tab icons omit their scale animation state
++and graphics layer. Return/operator ViewModels are created only inside authenticated content
++and retain activity ownership across tabs. This adds no polling or background worker.
++
++The owner reports lag before connecting and confirms Android Studio Run/Debug. No robot-data
++listener is active on that screen. Debug overhead is a likely contributor, not a measured sole
++cause. The existing optimized `benchmark` variant and Windows capture instructions are documented
++in [the measurement guide](docs/2026-11-17-performance-capture.md). A fresh on-phone optimized
++trace is required before claiming the remaining lag resolved; historical results are unchanged.
++
+ `performance/DevicePerformance.kt` selects a stable process-wide profile from Android's low-RAM
+ flag, total RAM (up to 6 GiB), heap class (up to 192 MiB), or CPU count (up to four). No brand/model
+ conditions are used. Both profiles avoid blur and continuous decorative effects. The reduced
+--- before/app/src/main/java/com/thesis/garby/MainActivity.kt
++++ app/src/main/java/com/thesis/garby/MainActivity.kt
+@@ -12,8 +12,6 @@
+ import androidx.activity.enableEdgeToEdge
+ import androidx.activity.result.contract.ActivityResultContracts
+ import androidx.compose.animation.AnimatedContent
+-import androidx.compose.animation.EnterTransition
+-import androidx.compose.animation.ExitTransition
+ import androidx.compose.animation.core.tween
+ import androidx.compose.animation.fadeIn
+ import androidx.compose.animation.fadeOut
+@@ -126,10 +124,6 @@
+ fun GarbyApp(notificationOpens: Int) {
+     val reducedEffects = LocalPerformanceProfile.current.reducedEffects
+     val authViewModel: AuthViewModel = viewModel()
+-    // Activity-scoped: a return request stays tracked while the operator moves between screens.
+-    val returnViewModel: ReturnViewModel = viewModel()
+-    // Activity-scoped too: the stop button under every tab and the Controls tab share it.
+-    val operatorViewModel: OperatorViewModel = viewModel()
+     val authState by authViewModel.authState.collectAsStateWithLifecycle()
+     val authError by authViewModel.signInError.collectAsStateWithLifecycle()
+     val signingIn by authViewModel.isSigningIn.collectAsStateWithLifecycle()
+@@ -140,34 +134,60 @@
+         }
+     }
+ 
++    val authenticated = authState is AuthState.Authenticated
++    if (reducedEffects) {
++        // A transition with None still creates AnimatedContent's measurement/subcomposition
++        // machinery. The light profile renders a single screen directly.
++        Box(Modifier.fillMaxSize()) {
++            GarbyAppContent(authenticated, signingIn, authError,
++                authViewModel::signIn, authViewModel::signOut)
++        }
++        return
++    }
++
+     AnimatedContent(
+-        targetState = authState is AuthState.Authenticated,
++        targetState = authenticated,
+         transitionSpec = {
+-            if (reducedEffects) EnterTransition.None togetherWith ExitTransition.None
+             // Signing in: the app grows into place while the start screen lets go.
+-            else (fadeIn(tween(320)) + scaleIn(tween(420), initialScale = 0.94f)) togetherWith
++            (fadeIn(tween(320)) + scaleIn(tween(420), initialScale = 0.94f)) togetherWith
+                 (fadeOut(tween(200)) + scaleOut(tween(260), targetScale = 1.04f))
+         },
+         modifier = Modifier.fillMaxSize(),
+         label = "authenticated"
+-    ) { authenticated ->
+-        if (authenticated) {
+-            GarbyNavHost(
+-                returnViewModel = returnViewModel,
+-                operatorViewModel = operatorViewModel,
+-                onSignOut = {
+-                    returnViewModel.onSignedOut()
+-                    operatorViewModel.onSignedOut()
+-                    authViewModel.signOut()
+-                }
+-            )
+-        } else {
+-            StartScreen(
+-                isAuthenticating = signingIn,
+-                errorMessage = authError,
+-                onConnect = authViewModel::signIn
+-            )
+-        }
++    ) { connected ->
++        GarbyAppContent(connected, signingIn, authError,
++            authViewModel::signIn, authViewModel::signOut)
++    }
++}
++
++@Composable
++private fun GarbyAppContent(
++    authenticated: Boolean,
++    signingIn: Boolean,
++    authError: String?,
++    onConnect: () -> Unit,
++    onSignOut: () -> Unit
++) {
++    if (authenticated) {
++        // Activity-scoped across tabs, but created only after sign-in. The Connect screen
++        // needs neither monitoring state machines nor their coroutine subscriptions.
++        val returnViewModel: ReturnViewModel = viewModel()
++        val operatorViewModel: OperatorViewModel = viewModel()
++        GarbyNavHost(
++            returnViewModel = returnViewModel,
++            operatorViewModel = operatorViewModel,
++            onSignOut = {
++                returnViewModel.onSignedOut()
++                operatorViewModel.onSignedOut()
++                onSignOut()
++            }
++        )
++    } else {
++        StartScreen(
++            isAuthenticating = signingIn,
++            errorMessage = authError,
++            onConnect = onConnect
++        )
+     }
+ }
+ 
+--- before/app/src/main/java/com/thesis/garby/StartScreen.kt
++++ app/src/main/java/com/thesis/garby/StartScreen.kt
+@@ -1,7 +1,7 @@
+ package com.thesis.garby
+ 
+ import androidx.compose.foundation.layout.Arrangement
+-import androidx.compose.foundation.layout.BoxWithConstraints
++import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.PaddingValues
+ import androidx.compose.foundation.layout.Row
+@@ -9,11 +9,9 @@
+ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.height
+-import androidx.compose.foundation.layout.heightIn
+ import androidx.compose.foundation.layout.padding
+ import androidx.compose.foundation.layout.width
+-import androidx.compose.foundation.rememberScrollState
+-import androidx.compose.foundation.verticalScroll
++import androidx.compose.foundation.lazy.LazyColumn
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.automirrored.rounded.KeyboardReturn
+ import androidx.compose.material.icons.automirrored.rounded.Login
+@@ -51,105 +49,109 @@
+     onConnect: () -> Unit
+ ) {
+     GlassScaffold(backdrop = Backdrop.Deep) { padding ->
+-        BoxWithConstraints(
++        Box(
+             Modifier
+                 .fillMaxSize()
+                 .padding(padding),
+             contentAlignment = Alignment.TopCenter
+         ) {
+-            Column(
++            LazyColumn(
+                 horizontalAlignment = Alignment.CenterHorizontally,
+                 verticalArrangement = Arrangement.SpaceBetween,
++                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+                 modifier = Modifier
+                     .widthCap()
+-                    .fillMaxWidth()
+-                    .verticalScroll(rememberScrollState())
+-                    .heightIn(min = maxHeight)
+-                    .padding(horizontal = 24.dp, vertical = 16.dp)
++                    .fillMaxSize()
+             ) {
+-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+-                    Spacer(Modifier.height(24.dp))
+-                    LogoBadge(size = 148.dp, ring = 4.dp)
+-                    Spacer(Modifier.height(22.dp))
+-                    Text(
+-                        "GARBY",
+-                        style = MaterialTheme.typography.displaySmall,
+-                        color = GarbyColors.TextPrimary,
+-                        modifier = Modifier.semantics { heading() }
+-                    )
+-                    Text(
+-                        "Operator console",
+-                        style = MaterialTheme.typography.titleMedium,
+-                        color = GarbyColors.Rose
+-                    )
+-                    Spacer(Modifier.height(6.dp))
+-                    Text(
+-                        "Your IoT-powered mobile waste robot",
+-                        style = MaterialTheme.typography.bodyMedium,
+-                        color = GarbyColors.TextSecondary,
+-                        textAlign = TextAlign.Center
+-                    )
++                item(key = "welcome") {
++                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
++                        Spacer(Modifier.height(24.dp))
++                        LogoBadge(size = 148.dp, ring = 4.dp)
++                        Spacer(Modifier.height(22.dp))
++                        Text(
++                            "GARBY",
++                            style = MaterialTheme.typography.displaySmall,
++                            color = GarbyColors.TextPrimary,
++                            modifier = Modifier.semantics { heading() }
++                        )
++                        Text(
++                            "Operator console",
++                            style = MaterialTheme.typography.titleMedium,
++                            color = GarbyColors.Rose
++                        )
++                        Spacer(Modifier.height(6.dp))
++                        Text(
++                            "Your IoT-powered mobile waste robot",
++                            style = MaterialTheme.typography.bodyMedium,
++                            color = GarbyColors.TextSecondary,
++                            textAlign = TextAlign.Center
++                        )
++                    }
+                 }
+ 
+-                GlassPanel(
+-                    modifier = Modifier
+-                        .fillMaxWidth()
+-                        .padding(vertical = 28.dp),
+-                    shape = GlassShapes.Hero,
+-                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)
+-                ) {
+-                    Feature(
+-                        icon = Icons.Rounded.Sensors,
+-                        title = "Live bin and air readings",
+-                        text = "Weight, bin level and gas, marked stale when they get old."
+-                    )
+-                    Feature(
+-                        icon = Icons.Rounded.Route,
+-                        title = "Follow every run",
+-                        text = "Where GARBY is between base and the collection point."
+-                    )
+-                    Feature(
+-                        icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
+-                        title = "Send it back to base",
+-                        text = "Only while it is waiting at the collection point."
+-                    )
++                item(key = "features") {
++                    GlassPanel(
++                        modifier = Modifier
++                            .fillMaxWidth()
++                            .padding(vertical = 28.dp),
++                        shape = GlassShapes.Hero,
++                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)
++                    ) {
++                        Feature(
++                            icon = Icons.Rounded.Sensors,
++                            title = "Live bin and air readings",
++                            text = "Weight, bin level and gas, marked stale when they get old."
++                        )
++                        Feature(
++                            icon = Icons.Rounded.Route,
++                            title = "Follow every run",
++                            text = "Where GARBY is between base and the collection point."
++                        )
++                        Feature(
++                            icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
++                            title = "Send it back to base",
++                            text = "Only while it is waiting at the collection point."
++                        )
++                    }
+                 }
+ 
+-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+-                    if (!errorMessage.isNullOrBlank()) {
+-                        GlassPanel(
+-                            modifier = Modifier
+-                                .fillMaxWidth()
+-                                .padding(bottom = 14.dp)
+-                                .semantics { liveRegion = LiveRegionMode.Polite },
+-                            glow = GarbyColors.Danger,
+-                            contentPadding = PaddingValues(14.dp)
+-                        ) {
+-                            Row(verticalAlignment = Alignment.CenterVertically) {
+-                                IconOrb(Icons.Rounded.ErrorOutline, GarbyColors.Danger, size = 32.dp)
+-                                Spacer(Modifier.width(12.dp))
+-                                Text(
+-                                    errorMessage,
+-                                    style = MaterialTheme.typography.bodySmall,
+-                                    color = GarbyColors.TextPrimary
+-                                )
++                item(key = "connect") {
++                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
++                        if (!errorMessage.isNullOrBlank()) {
++                            GlassPanel(
++                                modifier = Modifier
++                                    .fillMaxWidth()
++                                    .padding(bottom = 14.dp)
++                                    .semantics { liveRegion = LiveRegionMode.Polite },
++                                glow = GarbyColors.Danger,
++                                contentPadding = PaddingValues(14.dp)
++                            ) {
++                                Row(verticalAlignment = Alignment.CenterVertically) {
++                                    IconOrb(Icons.Rounded.ErrorOutline, GarbyColors.Danger, size = 32.dp)
++                                    Spacer(Modifier.width(12.dp))
++                                    Text(
++                                        errorMessage,
++                                        style = MaterialTheme.typography.bodySmall,
++                                        color = GarbyColors.TextPrimary
++                                    )
++                                }
+                             }
+                         }
++                        GlassButton(
++                            text = if (isAuthenticating) "Connecting…" else "Connect to GARBY",
++                            onClick = onConnect,
++                            loading = isAuthenticating,
++                            icon = Icons.AutoMirrored.Rounded.Login,
++                            modifier = Modifier.fillMaxWidth()
++                        )
++                        Spacer(Modifier.height(10.dp))
++                        Text(
++                            "Signs in anonymously with Firebase. No password is stored on this phone.",
++                            style = MaterialTheme.typography.bodySmall,
++                            color = GarbyColors.TextMuted,
++                            textAlign = TextAlign.Center
++                        )
+                     }
+-                    GlassButton(
+-                        text = if (isAuthenticating) "Connecting…" else "Connect to GARBY",
+-                        onClick = onConnect,
+-                        loading = isAuthenticating,
+-                        icon = Icons.AutoMirrored.Rounded.Login,
+-                        modifier = Modifier.fillMaxWidth()
+-                    )
+-                    Spacer(Modifier.height(10.dp))
+-                    Text(
+-                        "Signs in anonymously with Firebase. No password is stored on this phone.",
+-                        style = MaterialTheme.typography.bodySmall,
+-                        color = GarbyColors.TextMuted,
+-                        textAlign = TextAlign.Center
+-                    )
+                 }
+             }
+         }
+--- before/app/src/main/java/com/thesis/garby/ui/BottomBar.kt
++++ app/src/main/java/com/thesis/garby/ui/BottomBar.kt
+@@ -184,8 +184,8 @@
+         else animateColorAsState(tintTarget, label = "tabTint")
+     val pill by if (reducedEffects) rememberUpdatedState(pillTarget)
+         else animateColorAsState(pillTarget, label = "tabPill")
+-    val lift by animateFloatAsState(
+-        targetValue = if (selected && !reducedEffects) 1.08f else 1f,
++    val lift = if (reducedEffects) null else animateFloatAsState(
++        targetValue = if (selected) 1.08f else 1f,
+         animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium),
+         label = "tabLift"
+     )
+@@ -203,7 +203,10 @@
+     ) {
+         Icon(
+             tab.icon, contentDescription = null, tint = tint,
+-            modifier = Modifier.size(24.dp).graphicsLayer { scaleX = lift; scaleY = lift }
++            modifier = Modifier.size(24.dp).then(if (lift == null) Modifier else Modifier.graphicsLayer {
++                scaleX = lift.value
++                scaleY = lift.value
++            })
+         )
+         Spacer(Modifier.height(2.dp))
+         Text(
+--- before/app/src/main/java/com/thesis/garby/ui/glass/GlassMotion.kt
++++ app/src/main/java/com/thesis/garby/ui/glass/GlassMotion.kt
+@@ -85,17 +85,19 @@
+     content: @Composable () -> Unit
+ ) {
+     val reducedEffects = LocalPerformanceProfile.current.reducedEffects
++    if (reducedEffects) {
++        Box(modifier) {
++            if (loaded) content() else skeleton()
++        }
++        return
++    }
+     AnimatedContent(
+         targetState = loaded,
+         modifier = modifier,
+         transitionSpec = {
+-            if (reducedEffects) {
+-                EnterTransition.None togetherWith ExitTransition.None
+-            } else {
+-                (fadeIn(tween(260)) + slideInVertically(
+-                    spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)
+-                ) { height -> height / 10 }) togetherWith fadeOut(tween(140))
+-            }
++            (fadeIn(tween(260)) + slideInVertically(
++                spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)
++            ) { height -> height / 10 }) togetherWith fadeOut(tween(140))
+         },
+         label = "reveal"
+     ) { ready ->
+--- before/app/src/main/java/com/thesis/garby/ui/theme/Type.kt
++++ app/src/main/java/com/thesis/garby/ui/theme/Type.kt
+@@ -4,15 +4,16 @@
+ import androidx.compose.ui.text.TextStyle
+ import androidx.compose.ui.text.font.Font
+ import androidx.compose.ui.text.font.FontFamily
++import androidx.compose.ui.text.font.FontLoadingStrategy
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.unit.sp
+ import com.thesis.garby.R
+ 
+-/** Only font weights used by the production UI are bundled. */
++/** Keep first composition off disk: Compose uses a fallback until each bundled font is ready. */
+ val Montserrat = FontFamily(
+-    Font(R.font.montserrat_black, FontWeight.Black),
+-    Font(R.font.montserrat_bold, FontWeight.Bold),
+-    Font(R.font.montserrat_medium, FontWeight.Medium)
++    Font(R.font.montserrat_black, FontWeight.Black, loadingStrategy = FontLoadingStrategy.Async),
++    Font(R.font.montserrat_bold, FontWeight.Bold, loadingStrategy = FontLoadingStrategy.Async),
++    Font(R.font.montserrat_medium, FontWeight.Medium, loadingStrategy = FontLoadingStrategy.Async)
+ )
+ 
+ val GarbyTypography = Typography(
+--- /dev/null
++++ docs/2026-11-17-performance-capture.md
+@@ -0,0 +1,82 @@
++# Measure the app on Windows — 2026-11-17
++
++The owner reports lag on the Connect screen and confirms using Android Studio Run/Debug.
++That screen has no active robot-monitoring subscriptions. Debug instrumentation is a likely
++contributor; this does not establish the complete cause without a fresh phone measurement.
++
++## Run the existing optimized variant
++
++Keep this project in its current folder and retain `local.properties`, SDK and build-output
++paths. In Android Studio open **View → Tool Windows → Build Variants**, set `app` to
++**benchmark**, and press **Run**. Use **debug** when a Java/Kotlin debugger is needed.
++
++Alternatively, from PowerShell in the existing project folder:
++
++```powershell
++.\gradlew.bat :app:compileDebugKotlin :app:testDebugUnitTest :app:lintDebug :app:assembleBenchmark
++```
++
++The existing benchmark variant enables R8 and resource shrinking and disables debug
++instrumentation. It uses the configured production key when supplied; otherwise it uses
++the local development key. It has the same app ID and data as the other variants. A signature
++mismatch needs the matching key; uninstalling would discard this phone's anonymous operator
++identity. Benchmark is for local checks; the published APK is still the signed release build.
++
++## Capture before connecting
++
++Enable USB debugging and select the connected phone in Android Studio. These commands only
++inspect the Android app and reset its frame counters. They do not send any robot command.
++Use the SDK location already configured on your Windows PC; no Linux path is needed.
++
++Run in PowerShell, supplying the actual Windows path when prompted:
++
++```powershell
++$garbyAdb = Read-Host 'Full Windows path to platform-tools\adb.exe'
++& $garbyAdb devices
++$garbySerial = Read-Host 'Serial of the phone listed above'
++$garbyCapture = Join-Path $PWD ('docs\verification\phone-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
++New-Item -ItemType Directory -Path $garbyCapture | Out-Null
++& $garbyAdb -s $garbySerial shell dumpsys package com.thesis.garby |
++    Out-File (Join-Path $garbyCapture 'installed-package.txt') -Encoding utf8
++& $garbyAdb -s $garbySerial shell dumpsys gfxinfo com.thesis.garby reset |
++    Out-File (Join-Path $garbyCapture 'previous-frames.txt') -Encoding utf8
++```
++
++First verify GARBY is foreground. On the Connect screen, scroll up and down for **30 seconds**
++without connecting. Then run:
++
++```powershell
++& $garbyAdb -s $garbySerial shell dumpsys gfxinfo com.thesis.garby framestats |
++    Out-File (Join-Path $garbyCapture 'connect-frames.txt') -Encoding utf8
++& $garbyAdb -s $garbySerial shell dumpsys meminfo com.thesis.garby |
++    Out-File (Join-Path $garbyCapture 'connect-memory.txt') -Encoding utf8
++```
++
++Record the source revision, selected variant and whether this was the first launch. The
++package report should omit `DEBUGGABLE` for benchmark. Android Studio's Run deployment can
++still add `TEST_ONLY`; that flag controls installation and does not mean debugging is enabled.
++An existing signed-in session can be checked on Home first; signing out to see Connect is a
++deliberate operator choice, not part of these commands.
++
++For an authenticated comparison, create a second capture directory, reset frame counters,
++and repeat the same 30-second scroll/tab sequence. Compare optimized builds with optimized
++builds; a debug-to-benchmark improvement cannot be attributed solely to source edits. Package
++and frame reports carry no operator command payloads; do not substitute full Firebase/log dumps.
++
++The capture measures frame timing and memory, not physical robot behavior. If the optimized
++Connect screen still stalls, collect an Android Studio **System Trace** around the same
++interaction to identify time in composition, layout, font loading or rendering.
++
++## References
++
++- [Compose performance](https://developer.android.com/develop/ui/compose/performance): use a
++  release build with R8 to assess performance; debug mode adds overhead.
++- [Compose font loading strategies](https://developer.android.com/reference/kotlin/androidx/compose/ui/text/font/FontLoadingStrategy):
++  asynchronous resource fonts load on a background thread and may reflow once ready.
++- [Android frame statistics](https://developer.android.com/tools/dumpsys#gfxinfo): inspect
++  per-app graphics timing with `dumpsys gfxinfo`.
++- [Android Studio build outputs](https://developer.android.com/build/build-for-release):
++  the Run button adds the installation-only `testOnly` attribute.
++
++No phone was attached to the editing environment for this follow-up. These steps have not
++been executed against the current source. The November 14 phone results remain historical.

@@ -9,11 +9,14 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -35,12 +38,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -53,6 +59,20 @@ import com.thesis.garby.ui.glass.GlassTier
 import com.thesis.garby.ui.glass.glassFill
 import com.thesis.garby.ui.glass.glassSheen
 import com.thesis.garby.ui.theme.GarbyColors
+
+/** Measured overlay height, including its safe-area space; page backgrounds stay full bleed. */
+val LocalFloatingDockInset = compositionLocalOf { 0.dp }
+
+@Composable
+fun PaddingValues.withFloatingDockInset(): PaddingValues {
+    val direction = LocalLayoutDirection.current
+    return PaddingValues(
+        start = calculateStartPadding(direction),
+        top = calculateTopPadding(),
+        end = calculateEndPadding(direction),
+        bottom = calculateBottomPadding() + LocalFloatingDockInset.current
+    )
+}
 
 /** The four places of the app, in bar order. */
 enum class GarbyTab(val route: String, val label: String, val icon: ImageVector) {
@@ -72,11 +92,16 @@ enum class StopButtonState(val text: String, val detail: String) {
     Sending("SENDING STOP…", "Waiting for GARBY"),
     Requested("STOP SENT", "Waiting for the controllers to confirm"),
     Confirmed("STOPPED", "Confirmed by the controllers. Release it in Controls"),
-    Offline("EMERGENCY STOP", "This phone is offline: use the robot's own stop")
+    Offline("EMERGENCY STOP", "This phone is offline"),
+    CloudUnavailable("EMERGENCY STOP", "Unavailable: this phone is disconnected from GARBY"),
+    PiUnavailable("EMERGENCY STOP", "Unavailable: Raspberry Pi is offline or not reporting"),
+    ControllersUnavailable("EMERGENCY STOP", "Unavailable: MCU is offline or not reporting");
+
+    val available: Boolean get() = this == Ready || this == Requested || this == Confirmed
 }
 
 /**
- * The bar under every screen: an emergency stop that is always one tap away, and the four tabs.
+ * The bar under every screen: the phone stop is available while both Pi and MCU report online.
  * The phone's stop travels over the internet. It is a convenience, not a safety device.
  */
 @Composable
@@ -91,11 +116,10 @@ fun GarbyBottomBar(
     Box(
         modifier
             .fillMaxWidth()
-            .background(GarbyColors.Night)
             .windowInsetsPadding(
                 WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)
             )
-            .padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 8.dp)
+            .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 12.dp)
     ) {
         Column(
             Modifier
@@ -120,9 +144,12 @@ fun GarbyBottomBar(
 @Composable
 private fun StopButton(state: StopButtonState, onStop: () -> Unit) {
     val confirmed = state == StopButtonState.Confirmed
-    val fill by animateColorAsState(
-        if (confirmed) GarbyColors.CrimsonDeep else GarbyColors.Ember, label = "stopFill"
-    )
+    val reduced = LocalPerformanceProfile.current.reducedEffects
+    val target = if (!state.available && state != StopButtonState.Sending) GarbyColors.Neutral
+        else if (confirmed) GarbyColors.CrimsonDeep else GarbyColors.Ember
+    val fill by if (reduced) rememberUpdatedState(target)
+        else animateColorAsState(target, label = "stopFill")
+    val ink = if (!state.available && state != StopButtonState.Sending) GarbyColors.Night else Color.White
     val shape = RoundedCornerShape(20.dp)
     Row(
         Modifier
@@ -131,19 +158,19 @@ private fun StopButton(state: StopButtonState, onStop: () -> Unit) {
             .clip(shape)
             .background(fill)
             .border(1.dp, Color.White.copy(alpha = 0.35f), shape)
-            .clickable(role = Role.Button, onClickLabel = "Emergency stop", onClick = onStop)
+            .clickable(enabled = state.available, role = Role.Button, onClickLabel = "Emergency stop", onClick = onStop)
             .semantics { contentDescription = "${state.text}. ${state.detail}" }
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Rounded.Report, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
+        Icon(Icons.Rounded.Report, contentDescription = null, tint = ink, modifier = Modifier.size(26.dp))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 state.text, style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold, color = Color.White
+                fontWeight = FontWeight.Bold, color = ink
             )
-            Text(state.detail, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.9f))
+            Text(state.detail, style = MaterialTheme.typography.bodySmall, color = ink.copy(alpha = 0.9f))
         }
     }
 }
@@ -151,14 +178,14 @@ private fun StopButton(state: StopButtonState, onStop: () -> Unit) {
 @Composable
 private fun TabItem(tab: GarbyTab, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val reducedEffects = LocalPerformanceProfile.current.reducedEffects
-    val tint by animateColorAsState(
-        if (selected) GarbyColors.TextPrimary else GarbyColors.TextMuted, label = "tabTint"
-    )
-    val pill by animateColorAsState(
-        if (selected) GarbyColors.Ember.copy(alpha = 0.32f) else Color.Transparent, label = "tabPill"
-    )
-    val lift by animateFloatAsState(
-        targetValue = if (selected && !reducedEffects) 1.08f else 1f,
+    val tintTarget = if (selected) GarbyColors.TextPrimary else GarbyColors.TextMuted
+    val pillTarget = if (selected) GarbyColors.Ember.copy(alpha = 0.32f) else Color.Transparent
+    val tint by if (reducedEffects) rememberUpdatedState(tintTarget)
+        else animateColorAsState(tintTarget, label = "tabTint")
+    val pill by if (reducedEffects) rememberUpdatedState(pillTarget)
+        else animateColorAsState(pillTarget, label = "tabPill")
+    val lift = if (reducedEffects) null else animateFloatAsState(
+        targetValue = if (selected) 1.08f else 1f,
         animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium),
         label = "tabLift"
     )
@@ -176,7 +203,10 @@ private fun TabItem(tab: GarbyTab, selected: Boolean, onClick: () -> Unit, modif
     ) {
         Icon(
             tab.icon, contentDescription = null, tint = tint,
-            modifier = Modifier.size(24.dp).graphicsLayer { scaleX = lift; scaleY = lift }
+            modifier = Modifier.size(24.dp).then(if (lift == null) Modifier else Modifier.graphicsLayer {
+                scaleX = lift.value
+                scaleY = lift.value
+            })
         )
         Spacer(Modifier.height(2.dp))
         Text(
@@ -192,9 +222,14 @@ fun stopButtonState(
     statusFresh: Boolean,
     sendingStop: Boolean,
     stopRequestOpen: Boolean,
-    online: Boolean
+    online: Boolean,
+    controllersOnline: Boolean,
+    cloudConnected: Boolean
 ): StopButtonState = when {
     !online -> StopButtonState.Offline
+    !cloudConnected -> StopButtonState.CloudUnavailable
+    !statusFresh -> StopButtonState.PiUnavailable
+    !controllersOnline -> StopButtonState.ControllersUnavailable
     sendingStop -> StopButtonState.Sending
     statusFresh && emergencyStopped == true -> StopButtonState.Confirmed
     stopRequestOpen -> StopButtonState.Requested

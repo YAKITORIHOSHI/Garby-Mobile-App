@@ -2,12 +2,24 @@ package com.thesis.garby.realtime
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
+
+/** One inexpensive time source; the gateway shares it only while screens are observing. */
+internal fun monitoringClock(nowMs: () -> Long = System::currentTimeMillis): Flow<Long> = flow {
+    while (currentCoroutineContext().isActive) {
+        emit(nowMs())
+        delay(RtdbConstants.RETURN_TICK_MS)
+    }
+}.conflate()
 
 /**
  * Multiple screens share one listener, which detaches as soon as the last observer leaves.

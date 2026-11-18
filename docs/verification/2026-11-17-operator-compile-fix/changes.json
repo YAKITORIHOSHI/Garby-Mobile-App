@@ -1,0 +1,62 @@
+{
+  "date": "2026-11-17",
+  "scope": "Operator compilation follow-up",
+  "files": [
+    {
+      "path": "app/src/main/java/com/thesis/garby/OperatorViewModel.kt",
+      "status": "modified",
+      "beforeSha256": "9df9d623200a3e84cfccd72f94120cea027b8686e57c7621c22f2b371e68f566",
+      "afterSha256": "18cff57b123e9c36c7ff9661e70e4a0531e5fae2ffa98e3445c97b7181098bcb",
+      "purpose": "Unit observer block bodies, explicit collection types and matching normal/configured send calls."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt",
+      "status": "modified",
+      "beforeSha256": "250e9668cf3f0843ff52104892f0909c3195847a6016699326cb242124956f05",
+      "afterSha256": "3c729abf8d14141ae111d1dde164d1d6d65d9552240c25c842acbcec33220483",
+      "purpose": "Bundle map helper in existing database source and expose explicit three/five-argument sends."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/realtime/MapSession.kt",
+      "status": "deleted",
+      "beforeSha256": "63c4ee814c1bc2bf20c35c7fbd2dcee91276e921757fdfad8b549fdf1a15adaa",
+      "afterSha256": null,
+      "purpose": "Removed after moving its unchanged session implementation into OperatorDb.kt."
+    },
+    {
+      "path": "tools/static_quality_check.py",
+      "status": "modified",
+      "beforeSha256": "158d752cd5cac24cbc1268b26cc98f94dd8c82e82988a5ac4ec8c52200070ce4",
+      "afterSha256": "cf9aab2141909d15f170c61c8e084932d8862a7b19bad30a12f39206adbe4b90",
+      "purpose": "Detect observer return-style and missing/mixed-version operator APIs."
+    },
+    {
+      "path": "PATCH_NOTES.md",
+      "status": "modified",
+      "beforeSha256": "4bf10f99b7286addc047d42f3ea80efa308c5c3d752031319313ef68469b2c89",
+      "afterSha256": "19ca38f971673bf62635b428b80c3d16ad3fea58362eef6eb7cfdb2ddf87d525",
+      "purpose": "Dated follow-up source correction, checks and deployment scope."
+    },
+    {
+      "path": "app/src/test/java/com/thesis/garby/OperatorApiContractTest.kt",
+      "status": "created",
+      "beforeSha256": null,
+      "afterSha256": "eebf41239db1437d741b9b133d65afa5333a70298e544e1705beaa209a80a317",
+      "purpose": "Compile consumer references and check true suspend result signatures against Unit."
+    }
+  ],
+  "windowsConfiguration": {
+    "local.properties": {
+      "unchanged": true,
+      "sha256": "9fe5602b099412976a02a1f66bb733f022df4777e903c9ca3e61c40ce5ddaf11"
+    },
+    "settings.gradle.kts": {
+      "unchanged": true,
+      "sha256": "d772c595bf5f0d887a66bf5444778250200cdb92c4453eb6aa1e97066fa247a8"
+    },
+    "gradle.properties": {
+      "unchanged": true,
+      "sha256": "e03e85114266d406aa5ee13f9e439481d74a722fe5c3b7464f3690616e9fa8c8"
+    }
+  }
+}

@@ -1,0 +1,1222 @@
+--- before/app/src/main/java/com/thesis/garby/OperatorViewModel.kt
++++ app/src/main/java/com/thesis/garby/OperatorViewModel.kt
+@@ -18,6 +18,8 @@
+ import com.thesis.garby.realtime.OperatorStatus
+ import com.thesis.garby.realtime.OperatorSubmission
+ import com.thesis.garby.realtime.RtdbConstants
++import com.thesis.garby.realtime.RobotActivityState
++import com.thesis.garby.realtime.resolveRobotActivity
+ import com.thesis.garby.realtime.observeMapSession
+ import com.thesis.garby.realtime.operatorBlockReason
+ import com.thesis.garby.realtime.isFresh
+@@ -97,6 +99,12 @@
+         .stateIn(viewModelScope,
+             SharingStarted.WhileSubscribed(stopTimeoutMillis = 0, replayExpirationMillis = 0),
+             StopButtonState.PiUnavailable)
++    val activityState: StateFlow<RobotActivityState> = uiState.map { state ->
++        resolveRobotActivity(state.status, state.statusLoaded, state.nowMs, state.online, state.cloudConnected)
++    }.distinctUntilChanged().conflate().flowOn(GarbyDispatchers.background)
++        .stateIn(viewModelScope,
++            SharingStarted.WhileSubscribed(stopTimeoutMillis = 0, replayExpirationMillis = 0),
++            RobotActivityState())
+     private var sendJob: Job? = null
+ 
+     /** Status, last request and a clock, for as long as the app is on screen. */
+--- before/app/src/main/java/com/thesis/garby/MainDashboard.kt
++++ app/src/main/java/com/thesis/garby/MainDashboard.kt
+@@ -106,6 +106,8 @@
+ import com.thesis.garby.ui.binSectionIndicator
+ import com.thesis.garby.ui.formatAgo
+ import com.thesis.garby.ui.formatDecimal
++import com.thesis.garby.ui.RobotActivityCard
++import com.thesis.garby.realtime.RobotActivityState
+ import com.thesis.garby.ui.formatTimeOfDay
+ import com.thesis.garby.ui.glass.BandBar
+ import com.thesis.garby.ui.glass.BarBand
+@@ -124,7 +126,6 @@
+ import com.thesis.garby.ui.glass.RouteTrack
+ import com.thesis.garby.ui.glass.SectionHeader
+ import com.thesis.garby.ui.glass.ShimmerPanel
+-import com.thesis.garby.ui.glass.StatusDot
+ import com.thesis.garby.ui.glass.StatusPill
+ import com.thesis.garby.ui.healthColor
+ import com.thesis.garby.ui.returnStageUi
+@@ -138,6 +139,7 @@
+ @Composable
+ fun MainDashboard(
+     returnViewModel: ReturnViewModel,
++    operatorViewModel: OperatorViewModel,
+     onSignOut: () -> Unit,
+     deviceViewModel: DeviceViewModel = viewModel()
+ ) {
+@@ -156,7 +158,8 @@
+         summary = summary,
+         onSignOut = { confirmSignOut = true },
+         onManualDisposal = deviceViewModel::requestDisposal,
+-        onDismissDisposalNotice = deviceViewModel::clearDisposalNotice
++        onDismissDisposalNotice = deviceViewModel::clearDisposalNotice,
++        activityContent = { LiveRobotActivityCard(operatorViewModel) }
+     )
+ 
+     if (confirmSignOut) {
+@@ -170,13 +173,21 @@
+     }
+ }
+ 
++/** Only this card observes execution updates; the grid does not collect operator/map state. */
++@Composable
++private fun LiveRobotActivityCard(viewModel: OperatorViewModel) {
++    val state by viewModel.activityState.collectAsStateWithLifecycle()
++    RobotActivityCard(state)
++}
++
+ @Composable
+ fun DashboardContent(
+     state: DeviceUiState,
+     summary: ReturnSummary,
+     onSignOut: () -> Unit,
+     onManualDisposal: () -> Unit = {},
+-    onDismissDisposalNotice: () -> Unit = {}
++    onDismissDisposalNotice: () -> Unit = {},
++    activityContent: @Composable () -> Unit = { RobotActivityCard(RobotActivityState()) }
+ ) {
+     var confirmDisposal by rememberSaveable { mutableStateOf(false) }
+     val disposalBlocked = disposalBlockReason(state.device.status, state.cloudConnected,
+@@ -221,6 +232,7 @@
+                 fullWidth("connectivity") { ConnectivityBanner(issue) }
+             }
+             fullWidth("hero") { RobotHeroCard(state = state, summary = summary) }
++            fullWidth("current-activity") { activityContent() }
+             fullWidth("manual-disposal") {
+                 ManualDisposalCard(state, disposalBlocked,
+                     onStart = { confirmDisposal = true },
+--- before/app/src/main/java/com/thesis/garby/MainActivity.kt
++++ app/src/main/java/com/thesis/garby/MainActivity.kt
+@@ -27,6 +27,7 @@
+ import androidx.compose.foundation.layout.safeDrawing
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.CompositionLocalProvider
++import androidx.compose.runtime.DisposableEffect
+ import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableIntStateOf
+@@ -139,8 +140,7 @@
+         // A transition with None still creates AnimatedContent's measurement/subcomposition
+         // machinery. The light profile renders a single screen directly.
+         Box(Modifier.fillMaxSize()) {
+-            GarbyAppContent(authenticated, signingIn, authError,
+-                authViewModel::signIn, authViewModel::signOut)
++            GarbyAppContent(authenticated, signingIn, authError, authViewModel)
+         }
+         return
+     }
+@@ -155,8 +155,7 @@
+         modifier = Modifier.fillMaxSize(),
+         label = "authenticated"
+     ) { connected ->
+-        GarbyAppContent(connected, signingIn, authError,
+-            authViewModel::signIn, authViewModel::signOut)
++        GarbyAppContent(connected, signingIn, authError, authViewModel)
+     }
+ }
+ 
+@@ -165,28 +164,33 @@
+     authenticated: Boolean,
+     signingIn: Boolean,
+     authError: String?,
+-    onConnect: () -> Unit,
+-    onSignOut: () -> Unit
++    authViewModel: AuthViewModel
+ ) {
+     if (authenticated) {
+         // Activity-scoped across tabs, but created only after sign-in. The Connect screen
+         // needs neither monitoring state machines nor their coroutine subscriptions.
+         val returnViewModel: ReturnViewModel = viewModel()
+         val operatorViewModel: OperatorViewModel = viewModel()
++        DisposableEffect(authViewModel, returnViewModel, operatorViewModel) {
++            val cleanup: () -> Unit = {
++                returnViewModel.onSignedOut()
++                operatorViewModel.onSignedOut()
++            }
++            authViewModel.addSessionEndListener(cleanup)
++            onDispose { authViewModel.removeSessionEndListener(cleanup) }
++        }
+         GarbyNavHost(
+             returnViewModel = returnViewModel,
+             operatorViewModel = operatorViewModel,
+-            onSignOut = {
+-                returnViewModel.onSignedOut()
+-                operatorViewModel.onSignedOut()
+-                onSignOut()
+-            }
++            onSignOut = authViewModel::signOut
+         )
+     } else {
++        val internetAvailable by authViewModel.internetAvailable.collectAsStateWithLifecycle()
+         StartScreen(
+             isAuthenticating = signingIn,
+             errorMessage = authError,
+-            onConnect = onConnect
++            onConnect = authViewModel::signIn,
++            internetAvailable = internetAvailable
+         )
+     }
+ }
+@@ -243,7 +247,8 @@
+                 }
+             ) {
+                 composable(GarbyTab.Home.route) {
+-                    MainDashboard(returnViewModel = returnViewModel, onSignOut = onSignOut)
++                    MainDashboard(returnViewModel = returnViewModel,
++                        operatorViewModel = operatorViewModel, onSignOut = onSignOut)
+                 }
+                 composable(GarbyTab.Map.route) { MapScreen(viewModel = operatorViewModel) }
+                 composable(GarbyTab.Controls.route) { ControlsScreen(viewModel = operatorViewModel) }
+--- before/app/src/main/java/com/thesis/garby/StartScreen.kt
++++ app/src/main/java/com/thesis/garby/StartScreen.kt
+@@ -46,7 +46,8 @@
+ fun StartScreen(
+     isAuthenticating: Boolean,
+     errorMessage: String?,
+-    onConnect: () -> Unit
++    onConnect: () -> Unit,
++    internetAvailable: Boolean = true
+ ) {
+     GlassScaffold(backdrop = Backdrop.Deep) { padding ->
+         Box(
+@@ -138,9 +139,14 @@
+                             }
+                         }
+                         GlassButton(
+-                            text = if (isAuthenticating) "Connecting…" else "Connect to GARBY",
++                            text = when {
++                                !internetAvailable -> "No internet connection"
++                                isAuthenticating -> "Connecting…"
++                                else -> "Connect to GARBY"
++                            },
+                             onClick = onConnect,
+-                            loading = isAuthenticating,
++                            enabled = internetAvailable,
++                            loading = isAuthenticating && internetAvailable,
+                             icon = Icons.AutoMirrored.Rounded.Login,
+                             modifier = Modifier.fillMaxWidth()
+                         )
+--- before/app/src/main/java/com/thesis/garby/MapScreen.kt
++++ app/src/main/java/com/thesis/garby/MapScreen.kt
+@@ -1,10 +1,10 @@
+ package com.thesis.garby
+ 
+ import androidx.compose.foundation.background
+-import androidx.compose.foundation.clickable
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.FlowRow
+ import androidx.compose.foundation.layout.Row
+ import androidx.compose.foundation.layout.Spacer
+ import androidx.compose.foundation.layout.aspectRatio
+@@ -16,6 +16,8 @@
+ import androidx.compose.foundation.layout.width
+ import androidx.compose.foundation.layout.widthIn
+ import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.selection.selectable
++import androidx.compose.foundation.selection.selectableGroup
+ import androidx.compose.foundation.shape.CircleShape
+ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.foundation.verticalScroll
+@@ -44,10 +46,12 @@
+ import androidx.compose.ui.semantics.contentDescription
+ import androidx.compose.ui.semantics.semantics
+ import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.text.style.TextAlign
+ import androidx.compose.ui.unit.dp
+ import androidx.lifecycle.Lifecycle
+ import androidx.lifecycle.compose.LocalLifecycleOwner
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import androidx.lifecycle.compose.currentStateAsState
+ import androidx.lifecycle.repeatOnLifecycle
+ import com.thesis.garby.realtime.MapFrame
+ import com.thesis.garby.realtime.MarkerKind
+@@ -62,6 +66,7 @@
+ import com.thesis.garby.ui.glass.RevealWhenLoaded
+ import com.thesis.garby.ui.glass.widthCap
+ import com.thesis.garby.ui.theme.GarbyColors
++import java.util.Locale
+ 
+ private val RadarPoint = Color(0xFF3DF58A)
+ private val RadarRing = Color(0x5562B088)
+@@ -78,12 +83,14 @@
+ @Composable
+ fun MapScreen(viewModel: OperatorViewModel) {
+     val lifecycleOwner = LocalLifecycleOwner.current
++    val lifecycleState by lifecycleOwner.lifecycle.currentStateAsState()
+     LaunchedEffect(lifecycleOwner, viewModel) {
+         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { viewModel.observeMapWhileVisible() }
+     }
+     val state by viewModel.uiState.collectAsStateWithLifecycle()
+     var rangeIndex by rememberSaveable { mutableIntStateOf(1) }
+     val frame = state.frame
++    val locale = Locale.getDefault()
+     val stale = frame == null || frame.isStale(state.nowMs)
+     val piReporting = state.status.isFresh(state.nowMs)
+     val (subtitle, subtitleColor) = when {
+@@ -91,7 +98,7 @@
+         state.mapRefused -> "Not on GARBY's operator list" to GarbyColors.Warning
+         state.mapError != null -> state.mapError.orEmpty() to GarbyColors.Warning
+         state.mapSleeping -> "Sleeping · no new scan for 10 seconds" to GarbyColors.TextMuted
+-        frame != null && !stale -> "Live · ${"%.1f".format((state.nowMs - frame.atMs + frame.ageMs).coerceAtLeast(0L) / 1000f)} s old" to GarbyColors.Ok
++        frame != null && !stale -> "Live · ${"%.1f".format(locale, (state.nowMs - frame.atMs + frame.ageMs).coerceAtLeast(0L) / 1000f)} s old" to GarbyColors.Ok
+         frame != null -> "Stale: last scan ${((state.nowMs - frame.atMs) / 1000L).coerceAtLeast(0L)} s ago" to GarbyColors.Warning
+         !piReporting && state.statusLoaded -> "GARBY's Pi is not reporting" to GarbyColors.Warning
+         else -> "Waiting for the first scan" to GarbyColors.TextMuted
+@@ -113,15 +120,20 @@
+             GlassPanel(modifier = Modifier.widthCap().fillMaxWidth()) {
+                 RevealWhenLoaded(
+                     loaded = frame != null || state.mapSleeping,
++                    modifier = Modifier.fillMaxWidth(),
+                     skeleton = {
+-                        Box(Modifier.widthIn(max = MapDisplaySize).fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
+-                            RadarLoader(
+-                                when {
+-                                    state.mapRefused -> "Not on GARBY's operator list: this phone's ID is on Controls"
+-                                    state.frameLoaded && !piReporting -> "GARBY is not sending scans"
+-                                    else -> "Waiting for GARBY's LiDAR"
+-                                }
+-                            )
++                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
++                            Box(Modifier.widthIn(max = MapDisplaySize).fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
++                                RadarLoader(
++                                    label = when {
++                                        state.mapRefused -> "Not on GARBY's operator list: this phone's ID is on Controls"
++                                        state.frameLoaded && !piReporting -> "GARBY is not sending scans"
++                                        else -> "Waiting for GARBY's LiDAR"
++                                    },
++                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
++                                    animate = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
++                                )
++                            }
+                         }
+                     }
+                 ) {
+@@ -137,17 +149,18 @@
+                                     else "Map sleeping\nWaiting for a new scan",
+                                     style = MaterialTheme.typography.bodyLarge,
+                                     color = GarbyColors.TextMuted,
+-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
++                                    textAlign = TextAlign.Center
+                                 )
+                             }
+                         }
+                     }
+                 }
+                 Spacer(Modifier.height(12.dp))
+-                Row(
+-                    Modifier.fillMaxWidth(),
+-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+-                    verticalAlignment = Alignment.CenterVertically
++                FlowRow(
++                    Modifier.fillMaxWidth().selectableGroup(),
++                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
++                    verticalArrangement = Arrangement.spacedBy(8.dp),
++                    itemVerticalAlignment = Alignment.CenterVertically
+                 ) {
+                     Text("Range", style = MaterialTheme.typography.labelLarge, color = GarbyColors.TextMuted)
+                     RANGES_M.forEachIndexed { index, metres ->
+@@ -167,9 +180,9 @@
+                     if (frame.hold.isNotBlank()) DetailLine("Held by", frame.hold, GarbyColors.Warning)
+                     if (frame.zones.isNotBlank()) DetailLine("Zones", frame.zones.replace(",", ", "), GarbyColors.TextSecondary)
+                     val walls = listOfNotNull(
+-                        frame.wallLeftCm?.let { "left ${"%.0f".format(it)} cm" },
+-                        frame.wallRightCm?.let { "right ${"%.0f".format(it)} cm" },
+-                        frame.headingDeg?.let { "heading ${"%+.1f".format(it)}°" }
++                        frame.wallLeftCm?.let { "left ${"%.0f".format(locale, it)} cm" },
++                        frame.wallRightCm?.let { "right ${"%.0f".format(locale, it)} cm" },
++                        frame.headingDeg?.let { "heading ${"%+.1f".format(locale, it)}°" }
+                     )
+                     if (walls.isNotEmpty()) DetailLine("Walls", walls.joinToString(", "), GarbyColors.TextSecondary)
+                 }
+@@ -194,7 +207,7 @@
+         Modifier
+             .clip(GlassShapes.Pill)
+             .background(if (selected) GarbyColors.Ember.copy(alpha = 0.4f) else GarbyColors.GlassStrokeFaint)
+-            .clickable(role = Role.RadioButton, onClickLabel = "Show $text", onClick = onClick)
++            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+             .padding(horizontal = 16.dp, vertical = 10.dp)
+     ) {
+         Text(
+--- before/app/src/main/java/com/thesis/garby/firestore/AuthViewModel.kt
++++ app/src/main/java/com/thesis/garby/firestore/AuthViewModel.kt
+@@ -9,6 +9,7 @@
+ import com.google.firebase.auth.FirebaseAuthInvalidUserException
+ import com.google.firebase.installations.FirebaseInstallations
+ import com.thesis.garby.network.NetworkConnectivityManager
++import com.thesis.garby.network.watchSessionInternet
+ import com.thesis.garby.performance.GarbyDispatchers
+ import com.thesis.garby.realtime.GarbyRealtimeDb
+ import kotlinx.coroutines.CancellationException
+@@ -35,6 +36,7 @@
+     private companion object {
+         const val TAG = "AuthViewModel"
+         const val SIGN_IN_TIMEOUT_MS = 15_000L
++        const val OFFLINE_MESSAGE = "Internet connection lost. Your approved phone ID is kept. Reconnect to the internet, then press Connect."
+     }
+ 
+     private val firebaseAuth = FirebaseAuth.getInstance()
+@@ -46,21 +48,32 @@
+ 
+     private val _isSigningIn = MutableStateFlow(false)
+     val isSigningIn: StateFlow<Boolean> = _isSigningIn.asStateFlow()
++    val internetAvailable: StateFlow<Boolean> = NetworkConnectivityManager.isInternetAvailable
+ 
+     private val _signInError = MutableStateFlow<String?>(null)
+     val signInError: StateFlow<String?> = _signInError.asStateFlow()
+ 
+     private var signInJob: Job? = null
++    private var offlineConfirmed = false
++    private var sessionClosed = false
++    private val sessionEndListeners = linkedSetOf<() -> Unit>()
+ 
+     private val authStateListener = FirebaseAuth.AuthStateListener { auth ->
+         val authenticated = auth.currentUser != null
+         if (authenticated) {
++            // An asynchronous sign-in can finish after its waiting coroutine was cancelled.
++            if (offlineConfirmed || sessionClosed) {
++                _authState.value = AuthState.Unauthenticated
++                _isSigningIn.value = false
++                return@AuthStateListener
++            }
+             _signInError.value = null
+             publishMessagingInstallationId()
+             // While signIn() is in flight, the coroutine drives the state
+             // change so background RTDB warm-up completes before routing.
+             if (_isSigningIn.value) return@AuthStateListener
+         }
++        if (!authenticated && _authState.value is AuthState.Authenticated) clearSessionState()
+         _authState.value = if (authenticated) {
+             AuthState.Authenticated
+         } else {
+@@ -71,6 +84,32 @@
+ 
+     init {
+         firebaseAuth.addAuthStateListener(authStateListener)
++        viewModelScope.launch {
++            watchSessionInternet(
++                internet = internetAvailable,
++                onOnline = {
++                    offlineConfirmed = false
++                    if (_signInError.value == OFFLINE_MESSAGE) _signInError.value = null
++                },
++                onOffline = {
++                    offlineConfirmed = true
++                    endSession(OFFLINE_MESSAGE, clearIdentity = false)
++                }
++            )
++        }
++    }
++
++    /** The authenticated UI registers its two activity-scoped workflow resets. */
++    fun addSessionEndListener(listener: () -> Unit) {
++        sessionEndListeners.add(listener)
++    }
++
++    fun removeSessionEndListener(listener: () -> Unit) {
++        sessionEndListeners.remove(listener)
++    }
++
++    private fun clearSessionState() {
++        sessionEndListeners.toList().forEach { it() }
+     }
+ 
+     /** FCM registers this app instance by its Firebase Installation ID; see the messaging service. */
+@@ -85,12 +124,13 @@
+ 
+     fun signIn() {
+         if (_isSigningIn.value) return
+-        if (!NetworkConnectivityManager.isNetworkConnected() && firebaseAuth.currentUser == null) {
++        if (!internetAvailable.value || !NetworkConnectivityManager.isNetworkConnected()) {
+             _signInError.value = "This phone is offline. Connect to the internet and try again."
+             return
+         }
+         _signInError.value = null
+         _isSigningIn.value = true
++        sessionClosed = false
+ 
+         signInJob?.cancel()
+         signInJob = viewModelScope.launch(GarbyDispatchers.background) {
+@@ -126,7 +166,9 @@
+                 authenticated = false
+             } finally {
+                 withContext(Dispatchers.Main) {
+-                    _authState.value = if (authenticated) {
++                    val canEnter = authenticated && !sessionClosed && !offlineConfirmed && internetAvailable.value
++                    _authState.value = if (canEnter) {
++                        publishMessagingInstallationId()
+                         AuthState.Authenticated
+                     } else {
+                         AuthState.Unauthenticated
+@@ -138,10 +180,18 @@
+     }
+ 
+     fun signOut() {
++        endSession(null)
++    }
++
++    private fun endSession(message: String?, clearIdentity: Boolean = true) {
++        sessionClosed = true
+         signInJob?.cancel()
+-        _signInError.value = null
++        clearSessionState()
++        _signInError.value = message
+         _isSigningIn.value = false
+-        firebaseAuth.signOut()
++        _authState.value = AuthState.Unauthenticated
++        // An outage closes the app session but retains the operator-list identity.
++        if (clearIdentity) firebaseAuth.signOut()
+     }
+ 
+     override fun onCleared() {
+--- before/app/src/main/java/com/thesis/garby/network/NetworkConnectivityManager.kt
++++ app/src/main/java/com/thesis/garby/network/NetworkConnectivityManager.kt
+@@ -49,15 +49,34 @@
+         _isInternetAvailable.value = hasValidatedInternet(manager)
+ 
+         val callback = object : ConnectivityManager.NetworkCallback() {
+-            override fun onAvailable(network: Network) = refreshState()
+-            override fun onLost(network: Network) = refreshState()
++            private var currentNetwork: Network? = manager.activeNetwork
++
++            override fun onAvailable(network: Network) {
++                currentNetwork = network
++                // Android 8+ follows with capabilities; an available Wi-Fi link alone
++                // must not announce internet access (for example a captive portal).
++            }
++
++            override fun onLost(network: Network) {
++                if (network == currentNetwork) {
++                    currentNetwork = null
++                    _isInternetAvailable.value = false
++                }
++            }
+ 
+             override fun onCapabilitiesChanged(
+                 network: Network,
+                 networkCapabilities: NetworkCapabilities
+-            ) = refreshState()
++            ) {
++                if (network == currentNetwork) {
++                    _isInternetAvailable.value = hasValidatedInternet(networkCapabilities)
++                }
++            }
+ 
+-            override fun onUnavailable() = refreshState()
++            override fun onUnavailable() {
++                currentNetwork = null
++                _isInternetAvailable.value = false
++            }
+         }
+ 
+         try {
+@@ -82,17 +101,15 @@
+         return hasValidatedInternet(manager)
+     }
+ 
+-    private fun refreshState() {
+-        val manager = connectivityManager
+-        _isInternetAvailable.value = manager != null && hasValidatedInternet(manager)
+-    }
++    private fun hasValidatedInternet(capabilities: NetworkCapabilities): Boolean =
++        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
++            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+ 
+     private fun hasValidatedInternet(manager: ConnectivityManager): Boolean {
+         return try {
+             val network = manager.activeNetwork ?: return false
+             val capabilities = manager.getNetworkCapabilities(network) ?: return false
+-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+-                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
++            hasValidatedInternet(capabilities)
+         } catch (e: SecurityException) {
+             Log.w(TAG, "Connectivity check denied", e)
+             false
+--- before/app/src/main/java/com/thesis/garby/ui/glass/GlassVisuals.kt
++++ app/src/main/java/com/thesis/garby/ui/glass/GlassVisuals.kt
+@@ -7,7 +7,6 @@
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.border
+ import androidx.compose.foundation.layout.Box
+-import androidx.compose.foundation.layout.BoxScope
+ import androidx.compose.foundation.layout.BoxWithConstraints
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.Row
+@@ -42,7 +41,6 @@
+ import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.graphics.PathEffect
+ import androidx.compose.ui.graphics.StrokeCap
+-import androidx.compose.ui.graphics.drawscope.Stroke
+ import androidx.compose.ui.layout.ContentScale
+ import androidx.compose.ui.res.painterResource
+ import androidx.compose.ui.semantics.clearAndSetSemantics
+@@ -55,8 +53,6 @@
+ import com.thesis.garby.performance.LocalPerformanceProfile
+ import com.thesis.garby.ui.rememberResourceBitmap
+ import com.thesis.garby.ui.theme.GarbyColors
+-import kotlin.math.cos
+-import kotlin.math.sin
+ 
+ /** The round GARBY logo inside a glass ring. The source image is off-centre, hence the bias. */
+ @Composable
+@@ -87,80 +83,6 @@
+                     .clip(CircleShape)
+             )
+         }
+-    }
+-}
+-
+-/**
+- * A 270° ring. [progress] is clamped for drawing only, so callers can still print a value beyond
+- * the scale. [markers] are fractions of the scale drawn as ticks (thresholds).
+- */
+-@Composable
+-fun RingGauge(
+-    progress: Float,
+-    color: Color,
+-    modifier: Modifier = Modifier,
+-    strokeWidth: Dp = 10.dp,
+-    markers: List<Float> = emptyList(),
+-    content: @Composable BoxScope.() -> Unit = {}
+-) {
+-    val target = if (progress.isFinite()) progress.coerceIn(0f, 1f) else 0f
+-    val reducedEffects = LocalPerformanceProfile.current.reducedEffects
+-    val animated = if (reducedEffects) rememberUpdatedState(target) else
+-        animateFloatAsState(target, animationSpec = tween(250), label = "ringGauge")
+-    Box(contentAlignment = Alignment.Center, modifier = modifier) {
+-        Canvas(Modifier.matchParentSize()) {
+-            val sweepFraction = animated.value
+-            val stroke = strokeWidth.toPx()
+-            val diameter = size.minDimension - stroke * 2f
+-            val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
+-            val arcSize = Size(diameter, diameter)
+-            val start = 135f
+-            val sweep = 270f
+-            drawArc(
+-                color = Color.White.copy(alpha = 0.12f),
+-                startAngle = start,
+-                sweepAngle = sweep,
+-                useCenter = false,
+-                topLeft = topLeft,
+-                size = arcSize,
+-                style = Stroke(stroke, cap = StrokeCap.Round)
+-            )
+-            if (sweepFraction > 0f) {
+-                // Soft glow under the value arc.
+-                if (!reducedEffects) drawArc(
+-                    color = color.copy(alpha = 0.22f),
+-                    startAngle = start,
+-                    sweepAngle = sweep * sweepFraction,
+-                    useCenter = false,
+-                    topLeft = topLeft,
+-                    size = arcSize,
+-                    style = Stroke(stroke * 2f, cap = StrokeCap.Round)
+-                )
+-                drawArc(
+-                    color = color,
+-                    startAngle = start,
+-                    sweepAngle = sweep * sweepFraction,
+-                    useCenter = false,
+-                    topLeft = topLeft,
+-                    size = arcSize,
+-                    style = Stroke(stroke, cap = StrokeCap.Round)
+-                )
+-            }
+-            val radius = diameter / 2f
+-            markers.filter { it in 0f..1f }.forEach { fraction ->
+-                val angle = Math.toRadians((start + sweep * fraction).toDouble())
+-                val inner = radius - stroke * 0.9f
+-                val outer = radius + stroke * 0.9f
+-                drawLine(
+-                    color = Color.White.copy(alpha = 0.85f),
+-                    start = Offset(center.x + cos(angle).toFloat() * inner, center.y + sin(angle).toFloat() * inner),
+-                    end = Offset(center.x + cos(angle).toFloat() * outer, center.y + sin(angle).toFloat() * outer),
+-                    strokeWidth = 2.dp.toPx(),
+-                    cap = StrokeCap.Round
+-                )
+-            }
+-        }
+-        content()
+     }
+ }
+ 
+--- before/app/src/main/java/com/thesis/garby/ui/glass/GlassMotion.kt
++++ app/src/main/java/com/thesis/garby/ui/glass/GlassMotion.kt
+@@ -20,7 +20,6 @@
+ import androidx.compose.animation.slideInVertically
+ import androidx.compose.animation.slideOutHorizontally
+ import androidx.compose.animation.togetherWith
+-import androidx.compose.foundation.Canvas
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.Column
+@@ -37,6 +36,7 @@
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.draw.clip
+ import androidx.compose.ui.draw.drawBehind
++import androidx.compose.ui.draw.drawWithCache
+ import androidx.compose.ui.geometry.Offset
+ import androidx.compose.ui.geometry.Size
+ import androidx.compose.ui.graphics.Brush
+@@ -46,6 +46,7 @@
+ import androidx.compose.ui.graphics.drawscope.rotate
+ import androidx.compose.ui.semantics.contentDescription
+ import androidx.compose.ui.semantics.semantics
++import androidx.compose.ui.text.style.TextAlign
+ import androidx.compose.ui.unit.Dp
+ import androidx.compose.ui.unit.dp
+ import com.thesis.garby.performance.LocalPerformanceProfile
+@@ -162,11 +163,10 @@
+     }
+ }
+ 
+-/** GARBY's own loader: a LiDAR sweep going round a scope. */
+-@Composable
+-fun RadarLoader(label: String, modifier: Modifier = Modifier, size: Dp = 84.dp) {
+-    val reducedEffects = LocalPerformanceProfile.current.reducedEffects
+-    val angle = if (reducedEffects) null else rememberInfiniteTransition(label = "radar").animateFloat(
++/** Active progress on every profile; the caller pauses it when the map is not resumed. */
++@Composable
++fun RadarLoader(label: String, modifier: Modifier = Modifier, size: Dp = 84.dp, animate: Boolean = true) {
++    val angle = if (!animate) null else rememberInfiniteTransition(label = "radar").animateFloat(
+         initialValue = 0f,
+         targetValue = 360f,
+         animationSpec = infiniteRepeatable(tween(1800, easing = LinearEasing), RepeatMode.Restart),
+@@ -176,33 +176,35 @@
+         modifier = modifier.semantics { contentDescription = label },
+         horizontalAlignment = Alignment.CenterHorizontally
+     ) {
+-        Canvas(Modifier.size(size)) {
++        Spacer(Modifier.size(size).drawWithCache {
+             val radius = this.size.minDimension / 2f
+             val stroke = 1.5.dp.toPx()
+-            drawCircle(GarbyColors.GlassStrokeFaint, radius)
+-            listOf(1f, 0.66f, 0.33f).forEach { ring ->
+-                drawCircle(GarbyColors.GlassStroke, radius * ring - stroke, style = Stroke(stroke))
++            val ringRadii = floatArrayOf(radius - stroke, radius * 0.66f - stroke, radius * 0.33f - stroke)
++            val ringStroke = Stroke(stroke)
++            val sweep = Brush.sweepGradient(
++                0f to Color.Transparent,
++                0.78f to Color.Transparent,
++                1f to GarbyColors.EmberGlow.copy(alpha = 0.75f)
++            )
++            val sweepSize = Size(radius * 2f, radius * 2f)
++            val sweepCenter = Offset(this.size.width / 2f, this.size.height / 2f)
++            val sweepEnd = Offset(sweepCenter.x + radius - stroke, sweepCenter.y)
++            val sweepStroke = 2.dp.toPx()
++            val dotRadius = 3.dp.toPx()
++            onDrawBehind {
++                drawCircle(GarbyColors.GlassStrokeFaint, radius)
++                ringRadii.forEach { drawCircle(GarbyColors.GlassStroke, it, style = ringStroke) }
++                // Reading phase here invalidates only this small drawing, not the page/layout.
++                rotate(angle?.value ?: 300f) {
++                    drawArc(sweep, 0f, 360f, useCenter = true, size = sweepSize)
++                    drawLine(GarbyColors.EmberGlow, center, sweepEnd,
++                        strokeWidth = sweepStroke, cap = StrokeCap.Round)
++                }
++                drawCircle(GarbyColors.TextPrimary, dotRadius)
+             }
+-            rotate(angle?.value ?: 300f) {
+-                drawArc(
+-                    brush = Brush.sweepGradient(
+-                        0f to Color.Transparent,
+-                        0.78f to Color.Transparent,
+-                        1f to GarbyColors.EmberGlow.copy(alpha = 0.75f)
+-                    ),
+-                    startAngle = 0f,
+-                    sweepAngle = 360f,
+-                    useCenter = true,
+-                    size = Size(radius * 2f, radius * 2f)
+-                )
+-                drawLine(
+-                    GarbyColors.EmberGlow, center, Offset(center.x + radius - stroke, center.y),
+-                    strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round
+-                )
+-            }
+-            drawCircle(GarbyColors.TextPrimary, 3.dp.toPx())
+-        }
++        })
+         Spacer(Modifier.height(10.dp))
+-        Text(label, style = MaterialTheme.typography.bodyMedium, color = GarbyColors.TextMuted)
+-    }
+-}
++        Text(label, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodyMedium,
++            color = GarbyColors.TextMuted, textAlign = TextAlign.Center)
++    }
++}
+--- before/app/src/main/java/com/thesis/garby/ui/glass/GlassKit.kt
++++ app/src/main/java/com/thesis/garby/ui/glass/GlassKit.kt
+@@ -313,33 +313,6 @@
+     }
+ }
+ 
+-/** A floating frosted dock above the navigation bar, for the screen's primary action. */
+-@Composable
+-fun GlassDock(
+-    modifier: Modifier = Modifier,
+-    content: @Composable ColumnScope.() -> Unit
+-) {
+-    val shape = RoundedCornerShape(30.dp)
+-    Box(
+-        modifier
+-            .fillMaxWidth()
+-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+-            .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp)
+-    ) {
+-        Column(
+-            modifier = Modifier
+-                .fillMaxWidth()
+-                .clip(shape)
+-                .glassFill(GlassTier.Thick)
+-                .glassSheen(GlassTier.Thick)
+-                .border(1.dp, GlassBorderBrush, shape)
+-                .padding(12.dp),
+-            verticalArrangement = Arrangement.spacedBy(8.dp),
+-            content = content
+-        )
+-    }
+-}
+-
+ /** A 48 dp round glass button around an icon. */
+ @Composable
+ fun GlassIconButton(
+--- before/PATCH_NOTES.md
++++ PATCH_NOTES.md
+@@ -1,4 +1,36 @@
+ # GARBY Mobile App - Patch Notes
++
++## Home activity, centered map and inspection cleanup — 2026-11-17
++
++- Added app-wide internet session handling using the existing Android validated-network
++  callbacks. A three-second confirmed outage cancels sign-in/local workflow tracking and
++  returns to Connect from any tab while retaining the approved anonymous Firebase identity,
++  as the owner selected. A brief network handoff cancels the pending session closure.
++  Connect is disabled offline; recovery requires a deliberate Connect tap.
++  Late completion of a cancelled authentication task cannot reopen a closed session. No
++  HTTP polling, new worker pool or robot command is introduced.
++  Network callbacks now consume their delivered capabilities and track the current default
++  network; loss of an old network during handoff cannot overwrite the replacement's state.
++- Home adds a Current activity section: Running, Blocked, Turning, Idle, Parked, Emergency
++  stopped or Route fault. It uses the existing operator mirror; no extra database listener
++  or polling loop. Holds override route-leg turns, emergency stop dominates, and absent,
++  stale or disconnected reports show activity unavailable. The card observes a distinct
++  projection so unchanged clock/map updates do not redraw the grid. Idle does not prove location.
++- Centered the map's loading viewport, wrapped waiting text and Range group. Range choices
++  can wrap at larger text sizes and expose the selected radio state to accessibility services.
++- The 84 dp radar progress sweep now rotates on every performance profile while Map is
++  resumed and waiting. It reads animation phase only in drawing and caches brushes/geometry.
++  It pauses when backgrounded/leaving the tab and is removed on live data or ten-second sleep.
++  The user explicitly requested this active loader; decorative motion remains reduced.
++- Removed an unused dashboard import and the unreferenced RingGauge/GlassDock helpers with
++  exclusive imports. Map decimal formatting now supplies the device locale explicitly.
++  No inspection rules were disabled or warnings broadly suppressed. The configured Firebase
++  registration APIs were checked against current official documentation and retained.
++- Inspection results from the Windows IDE are not available in this environment; an actual
++  Problems export/list is still needed to account for every reported warning/error. Existing
++  static checks and source evidence are recorded in `docs/verification/2026-11-17-inspection-map/`.
++  Compilation, JVM tests and Android lint cannot start here without the Gradle/SDK toolchain.
++  MCU upload and Pi deployment: None for these Android changes.
+ 
+ ## Map/Controls content behind floating bars — 2026-11-17
+ 
+--- before/SYSTEM_ARCHITECTURE.md
++++ SYSTEM_ARCHITECTURE.md
+@@ -6,6 +6,40 @@
+ external acceptance items.
+ 
+ ## Map, controls and arrivals — 2026-11-17
++
++The activity-scoped AuthViewModel observes the existing process-wide validated-network
++StateFlow throughout the app lifecycle. `watchSessionInternet` confirms an offline transition
++for three seconds; online recovery cancels that pending action. Confirmed offline state ends
++the local session, clears the registered operator/return ViewModel state, cancels a pending
++sign-in and routes to Connect. The owner selected retention of the phone's approved Firebase
++identity: outage handling closes the local app session without FirebaseAuth.signOut.
++An explicit Sign out still uses the existing Firebase sign-out behavior. Cleanup callbacks are
++registered by authenticated composition and removed on disposal. Rotation alone does not end
++the session. A late auth completion is refused until a new deliberate Connect, and Connect
++is disabled while Android reports no validated internet. Reconnection never auto-signs in.
++This is network callback processing plus a cancellable one-shot delay, not periodic probing.
++Callbacks use the delivered NetworkCapabilities rather than synchronously querying Android
++inside a callback. A current-network check ignores late loss/capability events from the previous
++default network during a handoff. INTERNET and VALIDATED are required; Wi-Fi alone is insufficient.
++
++Home has a separate Current activity card. `RobotActivity.kt` projects the existing fresh
++operator mirror into execution labels; it does not participate in any command gate. Pi/cloud/
++phone/MCU availability is checked before displaying live activity. Confirmed emergency stop and
++route fault take priority; on active routes a reported hold is Blocked, and a turn leg from
++`station_mode.RouteLeg.describe()` is Turning. The explicit parking alignment message is also
++Turning. Otherwise active routes show Running; IDLE and completed outbound show Idle and Parked.
++Neither IDLE nor Running proves physical wheel movement or location. Unknown reports are explicit.
++
++`OperatorViewModel.activityState` maps/deduplicates on the existing bounded background dispatcher
++and is shared only while observed. The small Home card collects it separately; navigation and
++the grid do not collect full operator state. It reuses the existing operator listener and clock.
++
++The Map loading area is centered in a full-width host, its text uses centered alignment, and
++the Range controls use a centered wrapping FlowRow with radio selection semantics. The small
++radar progress sweep is an explicit exception to still loading on reduced-effects devices,
++requested by the owner. It runs only while waiting on a RESUMED Map lifecycle, with phase read
++in the drawing callback and cached geometry/brushes. Live data and ten-second sleep remove it.
++Range limits, map size, lease lifecycle and scroll-under-bar behavior are unchanged.
+ 
+ `MainDashboard` has no return dock. `ReturnScreen` is the Activity tab and owns an inline
+ Send back to base card, its confirmation, readiness checks and progress.
+--- before/README.md
++++ README.md
+@@ -8,7 +8,14 @@
+ ## What it does
+ 
+ - **Connect:** signs in anonymously with Firebase. No password or service key is in the app.
++  Android's validated internet connection is monitored across all tabs. After three seconds
++  without internet, the app closes its session, clears its local views and returns here,
++  keeping this phone's approved Firebase ID. Connect is disabled while offline. Once
++  internet returns, press Connect again.
+ - **Dashboard:**
++  - **Current activity:** Running, Blocked (with the reported reason), Turning or Idle, plus
++    parked, emergency-stop and fault states. Uses fresh Pi/MCU reports; disconnected or stale
++    reports show activity unavailable. Idle does not claim arrival at the station.
+   - **Robot:** where GARBY is (point A/station, driving to point B/disposal area, waiting there,
+     returning, route fault), shown on a base-to-collection-point track, and whether the Pi is
+     still reporting.
+@@ -50,7 +57,9 @@
+   between the hallway walls. It is live only while the tab is open, and says "stale" as soon as
+   it is not. The display is at most 320 dp wide with the same 2/4/8 m ranges. After 10 s
+   without a new scan it sleeps, releases the scan and drawing data, and wakes automatically
+-  when a fresh scan arrives. Leaving Map releases its scan immediately.
++  when a fresh scan arrives. Leaving Map releases its scan immediately. Range controls and
++  waiting text are centered; while waiting on this tab, a small radar sweep rotates until a
++  scan arrives or the map sleeps. The sweep pauses when the tab or app leaves the foreground.
+ - **Notifications:** receives GARBY push messages when a sender is configured (none is
+   deployed yet).
+ 
+--- /dev/null
++++ app/src/test/java/com/thesis/garby/realtime/RobotActivityTest.kt
+@@ -0,0 +1,77 @@
++package com.thesis.garby.realtime
++
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class RobotActivityTest {
++    private val now = 1_800_000_000_000L
++    private fun status(state: String = "OUTBOUND", hold: String = "", leg: String = "") =
++        OperatorStatus(updatedAtMs = now, connected = true, supported = true,
++            emergencyStopped = false, robotState = state, motionHold = hold, routeLeg = leg)
++
++    private fun activity(report: OperatorStatus?, loaded: Boolean = true,
++        online: Boolean = true, cloud: Boolean = true) =
++        resolveRobotActivity(report, loaded, now, online, cloud)
++
++    @Test
++    fun distinguishesRouteExecutionIdleAndParkedWithoutGuessingLocation() {
++        for (route in listOf("OUTBOUND", "RETURNING", "REVERSING")) {
++            assertEquals(RobotActivity.Running, activity(status(route)).activity)
++        }
++        assertEquals(RobotActivity.Idle, activity(status("IDLE")).activity)
++        assertEquals(RobotActivity.Parked, activity(status("AT_DESTINATION")).activity)
++        assertEquals(RobotActivity.Fault, activity(status("FAULT")).activity)
++        assertEquals(RobotActivity.Unknown, activity(status("UNKNOWN")).activity)
++        assertEquals(RobotActivity.Unknown, activity(status("NEW_STATE")).activity)
++    }
++
++    @Test
++    fun onlyReportedTurnStepsOrTheExplicitParkingAlignmentShowTurning() {
++        for (leg in listOf("Outbound step 2 of 9: left turn", "Return step 3 of 9: right turn",
++            "Return step 3 of 9: right turn (way back) · station step, station walls ignored")) {
++            val result = activity(status(leg = leg))
++            assertEquals(RobotActivity.Turning, result.activity)
++            assertEquals(leg, result.routeLeg)
++        }
++        for (leg in listOf("", "Outbound step 2 of 9: long hallway", "left turn",
++            "Unconfirmed left turn", "Outbound step 0 of 9: left turn")) {
++            assertEquals(RobotActivity.Running, activity(status(leg = leg)).activity)
++        }
++        assertEquals(RobotActivity.Turning,
++            activity(status(hold = "Parking: aligning square to the rear wall")).activity)
++    }
++
++    @Test
++    fun holdsOverrideTurnLegsAndConfirmedEmergencyStopOverridesAllActivity() {
++        val turning = status(leg = "Outbound step 2 of 9: left turn")
++        for (hold in listOf("LiDAR obstacle", "Turn sweep blocked", "Local sonar obstacle",
++            "Waiting for LiDAR", "Confirming clearance", "MPU not ready")) {
++            val result = activity(turning.copy(motionHold = hold))
++            assertEquals(RobotActivity.Blocked, result.activity)
++            assertEquals(hold, result.detail)
++        }
++        assertEquals(RobotActivity.EmergencyStopped,
++            activity(turning.copy(emergencyStopped = true, motionHold = "LiDAR obstacle")).activity)
++        // A completed/idle route must not inherit an old hold or turn label.
++        assertEquals(RobotActivity.Idle, activity(turning.copy(robotState = "IDLE")).activity)
++        assertEquals(RobotActivity.Parked,
++            activity(turning.copy(robotState = "AT_DESTINATION", motionHold = "LiDAR obstacle")).activity)
++    }
++
++    @Test
++    fun unavailableAndExpiredEvidenceCannotShowLiveActivity() {
++        val ready = status()
++        val unknown = RobotActivity.Unknown
++        assertEquals(unknown, activity(null).activity)
++        assertEquals(unknown, activity(ready, loaded = false).activity)
++        assertEquals(unknown, activity(ready, online = false).activity)
++        assertEquals(unknown, activity(ready, cloud = false).activity)
++        assertEquals(unknown, activity(ready.copy(connected = false)).activity)
++        assertEquals(unknown, activity(ready.copy(supported = false)).activity)
++        assertEquals(unknown, activity(ready.copy(updatedAtMs = 0)).activity)
++        assertEquals(unknown, activity(ready.copy(updatedAtMs = now - OperatorLimits.STATUS_STALE_AFTER_MS - 1)).activity)
++        assertEquals(unknown, activity(ready.copy(updatedAtMs = now + 60_000)).activity)
++        assertEquals(unknown, activity(ready.copy(emergencyStopped = true,
++            updatedAtMs = now - OperatorLimits.STATUS_STALE_AFTER_MS - 1)).activity)
++    }
++}
+--- /dev/null
++++ app/src/test/java/com/thesis/garby/network/InternetSessionTest.kt
+@@ -0,0 +1,87 @@
++package com.thesis.garby.network
++
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.cancelAndJoin
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.test.advanceTimeBy
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++@OptIn(ExperimentalCoroutinesApi::class)
++class InternetSessionTest {
++    @Test
++    fun offlineIsConfirmedOnceAndReconnectDoesNotAutomaticallyStartASession() = runTest {
++        val internet = MutableStateFlow(true)
++        var onlineEvents = 0
++        var signOuts = 0
++        val watcher = backgroundScope.launch {
++            watchSessionInternet(internet, onOnline = { onlineEvents++ }, onOffline = { signOuts++ })
++        }
++        runCurrent()
++        assertEquals(1, onlineEvents)
++        internet.value = false
++        runCurrent()
++        advanceTimeBy(OFFLINE_CONFIRMATION_MS - 1)
++        runCurrent()
++        assertEquals(0, signOuts)
++        advanceTimeBy(1)
++        runCurrent()
++        assertEquals(1, signOuts)
++        advanceTimeBy(60_000)
++        runCurrent()
++        assertEquals(1, signOuts) // no repeated polling/sign-outs while offline
++        internet.value = true
++        runCurrent()
++        assertEquals(2, onlineEvents)
++        assertEquals(1, signOuts)
++        watcher.cancelAndJoin()
++    }
++
++    @Test
++    fun briefHandoffCancelsThePendingOfflineActionAndALaterOutageStartsAFreshWindow() = runTest {
++        val internet = MutableStateFlow(true)
++        var signOuts = 0
++        val watcher = backgroundScope.launch {
++            watchSessionInternet(internet, onOnline = {}, onOffline = { signOuts++ })
++        }
++        runCurrent()
++        internet.value = false
++        runCurrent()
++        advanceTimeBy(OFFLINE_CONFIRMATION_MS - 1)
++        internet.value = true
++        runCurrent()
++        advanceTimeBy(OFFLINE_CONFIRMATION_MS)
++        runCurrent()
++        assertEquals(0, signOuts)
++        internet.value = false
++        runCurrent()
++        advanceTimeBy(OFFLINE_CONFIRMATION_MS)
++        runCurrent()
++        assertEquals(1, signOuts)
++        watcher.cancelAndJoin()
++    }
++
++    @Test
++    fun startupOfflineIsHandledAndCancellationDoesNotLeaveAnOfflineTimer() = runTest {
++        val internet = MutableStateFlow(false)
++        var signOuts = 0
++        val watcher = launch {
++            watchSessionInternet(internet, onOnline = {}, onOffline = { signOuts++ })
++        }
++        runCurrent()
++        advanceTimeBy(OFFLINE_CONFIRMATION_MS)
++        runCurrent()
++        assertEquals(1, signOuts)
++        internet.value = true
++        runCurrent()
++        internet.value = false
++        runCurrent()
++        watcher.cancelAndJoin()
++        advanceTimeBy(OFFLINE_CONFIRMATION_MS)
++        runCurrent()
++        assertEquals(1, signOuts)
++    }
++}
+--- /dev/null
++++ app/src/main/java/com/thesis/garby/ui/RobotActivityCard.kt
+@@ -0,0 +1,60 @@
++package com.thesis.garby.ui
++
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.width
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.rounded.Block
++import androidx.compose.material.icons.rounded.ErrorOutline
++import androidx.compose.material.icons.rounded.HourglassTop
++import androidx.compose.material.icons.rounded.Pause
++import androidx.compose.material.icons.rounded.PlayArrow
++import androidx.compose.material.icons.rounded.Report
++import androidx.compose.material.icons.rounded.Sync
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.semantics.heading
++import androidx.compose.ui.semantics.semantics
++import androidx.compose.ui.semantics.stateDescription
++import androidx.compose.ui.unit.dp
++import com.thesis.garby.realtime.RobotActivity
++import com.thesis.garby.realtime.RobotActivityState
++import com.thesis.garby.ui.glass.GlassPanel
++import com.thesis.garby.ui.glass.IconOrb
++import com.thesis.garby.ui.theme.GarbyColors
++
++@Composable
++fun RobotActivityCard(state: RobotActivityState) {
++    val (icon, color) = when (state.activity) {
++        RobotActivity.Running -> Icons.Rounded.PlayArrow to GarbyColors.Info
++        RobotActivity.Blocked -> Icons.Rounded.Block to GarbyColors.Warning
++        RobotActivity.Turning -> Icons.Rounded.Sync to GarbyColors.Rose
++        RobotActivity.Idle, RobotActivity.Parked -> Icons.Rounded.Pause to GarbyColors.Ok
++        RobotActivity.EmergencyStopped -> Icons.Rounded.Report to GarbyColors.Danger
++        RobotActivity.Fault -> Icons.Rounded.ErrorOutline to GarbyColors.Danger
++        RobotActivity.Unknown -> Icons.Rounded.HourglassTop to GarbyColors.Neutral
++    }
++    GlassPanel(modifier = Modifier.fillMaxWidth().semantics { stateDescription = state.activity.label }) {
++        Row(verticalAlignment = Alignment.CenterVertically) {
++            IconOrb(icon, color, size = 42.dp)
++            Spacer(Modifier.width(12.dp))
++            Column(Modifier.weight(1f)) {
++                Text("CURRENT ACTIVITY", style = MaterialTheme.typography.labelSmall,
++                    color = GarbyColors.TextMuted, modifier = Modifier.semantics { heading() })
++                Text(state.activity.label, style = MaterialTheme.typography.headlineSmall, color = color)
++            }
++        }
++        Spacer(Modifier.height(10.dp))
++        Text(state.detail, style = MaterialTheme.typography.bodyMedium, color = GarbyColors.TextSecondary)
++        if (state.routeLeg.isNotBlank()) {
++            Spacer(Modifier.height(6.dp))
++            Text(state.routeLeg, style = MaterialTheme.typography.bodySmall, color = GarbyColors.TextMuted)
++        }
++    }
++}
+--- /dev/null
++++ app/src/main/java/com/thesis/garby/realtime/RobotActivity.kt
+@@ -0,0 +1,61 @@
++package com.thesis.garby.realtime
++
++/** Reported execution activity, distinct from the route's last confirmed endpoint. */
++enum class RobotActivity(val label: String) {
++    Running("Running"), Blocked("Blocked"), Turning("Turning"), Idle("Idle"),
++    Parked("Parked"), EmergencyStopped("Emergency stopped"), Fault("Route fault"),
++    Unknown("Activity unavailable")
++}
++
++data class RobotActivityState(
++    val activity: RobotActivity = RobotActivity.Unknown,
++    val detail: String = "Waiting for GARBY's activity report.",
++    val routeLeg: String = ""
++)
++
++// station_mode.RouteLeg.describe() supplies this field; missing/expired legs are empty.
++private val turnLeg = Regex("^(?:Outbound|Return) step [1-9][0-9]* of [1-9][0-9]*: (left|right) turn(?: \\(way back\\))?(?: · station step, station walls ignored)?$")
++
++/** Display only. Unknown/stale telemetry cannot become a live running or idle indication. */
++fun resolveRobotActivity(
++    status: OperatorStatus?,
++    statusLoaded: Boolean,
++    nowMs: Long,
++    online: Boolean,
++    cloudConnected: Boolean
++): RobotActivityState {
++    fun unavailable(detail: String) = RobotActivityState(detail = detail)
++    if (!online) return unavailable("This phone is offline.")
++    if (!cloudConnected) return unavailable("The cloud link is unavailable.")
++    if (!statusLoaded) return unavailable("Waiting for GARBY's activity report.")
++    if (status == null) return unavailable("GARBY has not published an activity report.")
++    if (!status.isFresh(nowMs)) return unavailable("GARBY's activity report is stale.")
++    if (!status.connected || !status.supported) return unavailable("Waiting for the MCU to report online.")
++    if (status.emergencyStopped == true) {
++        return RobotActivityState(RobotActivity.EmergencyStopped, "The controllers confirmed the emergency stop.")
++    }
++    val robotState = RobotState.fromWire(status.robotState)
++    return when (robotState) {
++        RobotState.Idle -> RobotActivityState(RobotActivity.Idle, "GARBY reports idle; its location is shown separately.")
++        RobotState.AtDestination -> RobotActivityState(RobotActivity.Parked, "The outbound route is complete at the disposal area.")
++        RobotState.Fault -> RobotActivityState(RobotActivity.Fault, "GARBY reports a route fault. Check the robot.")
++        RobotState.Outbound, RobotState.Returning, RobotState.Reversing -> {
++            val leg = status.routeLeg.trim()
++            val hold = status.motionHold.trim()
++            when {
++                // This particular Pi message reports a parking correction, not a hold.
++                hold == "Parking: aligning square to the rear wall" ->
++                    RobotActivityState(RobotActivity.Turning, hold, leg)
++                hold.isNotEmpty() -> RobotActivityState(RobotActivity.Blocked, hold, leg)
++                turnLeg.matches(leg) ->
++                    RobotActivityState(RobotActivity.Turning, "Executing the reported turn step.", leg)
++                else -> RobotActivityState(RobotActivity.Running, when (robotState) {
++                    RobotState.Returning -> "Executing the return route."
++                    RobotState.Reversing -> "Executing reverse to start."
++                    else -> "Executing the outbound route."
++                }, leg)
++            }
++        }
++        RobotState.Unknown, null -> unavailable("The controllers have not confirmed the current activity.")
++    }
++}
+--- /dev/null
++++ app/src/main/java/com/thesis/garby/network/InternetSession.kt
+@@ -0,0 +1,24 @@
++package com.thesis.garby.network
++
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.collectLatest
++import kotlinx.coroutines.flow.distinctUntilChanged
++
++internal const val OFFLINE_CONFIRMATION_MS = 3_000L
++
++/** A network handoff may briefly lose validation. Recovery cancels a pending sign-out. */
++internal suspend fun watchSessionInternet(
++    internet: Flow<Boolean>,
++    confirmationMs: Long = OFFLINE_CONFIRMATION_MS,
++    onOnline: () -> Unit,
++    onOffline: () -> Unit
++) {
++    internet.distinctUntilChanged().collectLatest { online ->
++        if (online) onOnline()
++        else {
++            delay(confirmationMs)
++            onOffline()
++        }
++    }
++}

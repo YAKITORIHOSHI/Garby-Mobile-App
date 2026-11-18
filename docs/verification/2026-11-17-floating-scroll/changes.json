@@ -1,0 +1,92 @@
+[
+  {
+    "file": "app/src/main/java/com/thesis/garby/MapScreen.kt",
+    "before_sha256": "e75ce4dbb8e42ebc0b8528fdab87895a54c156d26020ae0d4a53542a7372f68a",
+    "after_sha256": "4815f9b71f27332c2d6dcb562ac3446a4fb00954291303c3d3bd0b895fe5bdf1",
+    "status": "modified"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/ControlsScreen.kt",
+    "before_sha256": "39cab7657f2eacab78e6cd0e7292c7a4d1ce7532f82f0b27f11ac9a92007bb2b",
+    "after_sha256": "0f0e0397dbdc97456ec9cb425dbc28ef6379897d8dc892d773e88421811c5bb3",
+    "status": "modified"
+  },
+  {
+    "file": "PATCH_NOTES.md",
+    "before_sha256": "2ffdffa46155587b2df33061592054bdfe8f0d1fafe67d90f0a027ffe1ae27c8",
+    "after_sha256": "7f778cc91e939885ea0112357a12cbf4d98cdd96bf6af6db92dbf650408bb33a",
+    "status": "modified"
+  },
+  {
+    "file": "SYSTEM_ARCHITECTURE.md",
+    "before_sha256": "dc47952f1b6d9d9be28e947a8a332f8b2704f3a99fe942baecb3f0b81012a289",
+    "after_sha256": "1b10d82c10f1fd2c45fe3d7a08cc62d099a6a84d45c5251dda3e82ea3159b32a",
+    "status": "modified"
+  },
+  {
+    "file": "docs/verification/2026-11-17-floating-scroll/VERIFICATION.md",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "ca3992b612f8fd7d7573660f91c5db966dcaf4907d5f070c975c4adcfa7631cc"
+  },
+  {
+    "file": "docs/verification/2026-11-17-floating-scroll/changes.patch",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "13c7df40888e5112b4d197376d52556cbf81f884c19407e507e3779c9ccd75fa"
+  },
+  {
+    "file": "docs/verification/2026-11-17-floating-scroll/checks.json",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "a42094f44c194615317f340f48e600892d066778b69211720e4a376acfe77325"
+  },
+  {
+    "file": "docs/verification/2026-11-17-floating-scroll/diff-check.log",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "f0f8b61c4c95069445e1d2a16775b8909e7720620a407c167d458b59a079c53c"
+  },
+  {
+    "file": "docs/verification/2026-11-17-floating-scroll/gradle-check.json",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "4d37ee5d9ac2f17f2fc7d57210b56d56d4b433be29525c6300920a5aea079a90"
+  },
+  {
+    "file": "docs/verification/2026-11-17-floating-scroll/gradle.log",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "f9c9e7b9732c36094927e4d8c86d115b29268dbce0094998919486fa2f691ea1"
+  },
+  {
+    "file": "docs/verification/2026-11-17-floating-scroll/production-changes.json",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "d4c4134dadf9164587dc026dc00c84e1cfdf926fa2c5f6048e37eadbbdd72a7f"
+  },
+  {
+    "file": "docs/verification/2026-11-17-floating-scroll/scope-checks.log",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "2eaaab3495dc9db94a17cad3fd4ef6edbde9abce1bace0b27c9b337779ac1a2a"
+  },
+  {
+    "file": "docs/verification/2026-11-17-floating-scroll/source-after.json",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "d944e4c9276cdf0ee788ae35f07cce2d906e3a9cbc34c32f2fe5f484f7ffb76f"
+  },
+  {
+    "file": "docs/verification/2026-11-17-floating-scroll/source-before.json",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "0f59b4d1c590186fda487e6c4228bc052931a4803f369ce76432b4dc84a4fcce"
+  },
+  {
+    "file": "docs/verification/2026-11-17-floating-scroll/static-quality.log",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "ccc49596a8fd7c82b24f27c1248d10a3e60f531efc2a0138c86d04d95b706bb4"
+  }
+]

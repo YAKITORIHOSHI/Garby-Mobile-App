@@ -1,0 +1,4 @@
+14 paths/build/palette/inspection/gateway/workflow files unchanged.
+Changed Kotlin delimiters balanced; source inspection only, not a compiler.
+New activity state reuses existing operator mirror and shared clock; no new database listener.
+Offline closes local app session with clearIdentity=false; manual sign-out keeps the prior explicit behavior.

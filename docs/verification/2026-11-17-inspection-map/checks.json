@@ -1,0 +1,60 @@
+[
+  {
+    "command": [
+      "python3",
+      "-B",
+      "tools/static_quality_check.py"
+    ],
+    "exit_code": 0,
+    "log": "static-quality.log"
+  },
+  {
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "exit_code": 0,
+    "log": "diff-check.log"
+  },
+  {
+    "command": "textual unused-import review, main/test Kotlin",
+    "status": "pass",
+    "log": "source-review.log",
+    "limitation": "No type analysis; not Kotlin compilation or Android lint"
+  },
+  {
+    "command": "compare hashes and balance edited Kotlin delimiters",
+    "exit_code": 0,
+    "log": "scope-checks.log",
+    "limitation": "Not type analysis or phone execution"
+  },
+  {
+    "command": [
+      "bash",
+      "gradlew",
+      ":app:compileDebugKotlin",
+      ":app:testDebugUnitTest",
+      ":app:lintDebug",
+      ":app:compileBenchmarkKotlin",
+      ":app:lintBenchmark",
+      "--no-daemon",
+      "--console=plain"
+    ],
+    "exit_code": 1,
+    "seconds": 0.482,
+    "log": "gradle.log",
+    "GRADLE_USER_HOME": "/tmp/garby-inspection-map-gradle",
+    "status": "blocked before compilation"
+  },
+  {
+    "command": "Windows IDE Problems/inspection results",
+    "status": "unavailable",
+    "reason": "No connected IDE/document session or current export; actual entries requested from the owner"
+  },
+  {
+    "command": "Android on-phone integration/visual/frame-time checks",
+    "status": "not run",
+    "reason": "No Android SDK/ADB or connected phone on this host"
+  }
+]

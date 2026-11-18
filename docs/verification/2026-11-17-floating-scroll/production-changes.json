@@ -1,0 +1,26 @@
+[
+  {
+    "file": "app/src/main/java/com/thesis/garby/MapScreen.kt",
+    "before_sha256": "e75ce4dbb8e42ebc0b8528fdab87895a54c156d26020ae0d4a53542a7372f68a",
+    "after_sha256": "4815f9b71f27332c2d6dcb562ac3446a4fb00954291303c3d3bd0b895fe5bdf1",
+    "status": "modified"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/ControlsScreen.kt",
+    "before_sha256": "39cab7657f2eacab78e6cd0e7292c7a4d1ce7532f82f0b27f11ac9a92007bb2b",
+    "after_sha256": "0f0e0397dbdc97456ec9cb425dbc28ef6379897d8dc892d773e88421811c5bb3",
+    "status": "modified"
+  },
+  {
+    "file": "PATCH_NOTES.md",
+    "before_sha256": "2ffdffa46155587b2df33061592054bdfe8f0d1fafe67d90f0a027ffe1ae27c8",
+    "after_sha256": "7f778cc91e939885ea0112357a12cbf4d98cdd96bf6af6db92dbf650408bb33a",
+    "status": "modified"
+  },
+  {
+    "file": "SYSTEM_ARCHITECTURE.md",
+    "before_sha256": "dc47952f1b6d9d9be28e947a8a332f8b2704f3a99fe942baecb3f0b81012a289",
+    "after_sha256": "1b10d82c10f1fd2c45fe3d7a08cc62d099a6a84d45c5251dda3e82ea3159b32a",
+    "status": "modified"
+  }
+]

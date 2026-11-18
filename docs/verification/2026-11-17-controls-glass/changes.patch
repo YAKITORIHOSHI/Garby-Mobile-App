@@ -1,0 +1,1168 @@
+--- a/app/src/main/java/com/thesis/garby/ControlsScreen.kt
++++ b/app/src/main/java/com/thesis/garby/ControlsScreen.kt
+@@ -1,56 +1,124 @@
+ package com.thesis.garby
+ 
++import androidx.compose.animation.core.animateFloatAsState
++import androidx.compose.animation.core.tween
+ import androidx.compose.foundation.background
++import androidx.compose.foundation.border
+ import androidx.compose.foundation.clickable
++import androidx.compose.foundation.interaction.MutableInteractionSource
++import androidx.compose.foundation.interaction.collectIsPressedAsState
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.ColumnScope
++import androidx.compose.foundation.layout.FlowRow
++import androidx.compose.foundation.layout.PaddingValues
+ import androidx.compose.foundation.layout.Row
+ import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.WindowInsets
++import androidx.compose.foundation.layout.WindowInsetsSides
+ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.heightIn
++import androidx.compose.foundation.layout.only
+ import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.safeDrawing
++import androidx.compose.foundation.layout.size
+ import androidx.compose.foundation.layout.width
++import androidx.compose.foundation.layout.windowInsetsPadding
+ import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.selection.selectable
++import androidx.compose.foundation.selection.toggleable
++import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.foundation.verticalScroll
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.rounded.Build
++import androidx.compose.material.icons.rounded.Check
++import androidx.compose.material.icons.rounded.Close
++import androidx.compose.material.icons.rounded.Lock
++import androidx.compose.material.icons.rounded.PanTool
++import androidx.compose.material.icons.rounded.PlayArrow
++import androidx.compose.material.icons.rounded.Refresh
++import androidx.compose.material.icons.rounded.Replay
++import androidx.compose.material.icons.rounded.Sensors
++import androidx.compose.material.icons.rounded.Tune
++import androidx.compose.material3.CircularProgressIndicator
++import androidx.compose.material3.Icon
+ import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Scaffold
+ import androidx.compose.material3.Text
++import androidx.compose.material3.ripple
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.CompositionLocalProvider
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberUpdatedState
+ import androidx.compose.runtime.saveable.rememberSaveable
+ import androidx.compose.runtime.setValue
++import androidx.compose.runtime.staticCompositionLocalOf
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.draw.clip
++import androidx.compose.ui.draw.drawWithCache
++import androidx.compose.ui.draw.shadow
++import androidx.compose.ui.geometry.Offset
++import androidx.compose.ui.graphics.Brush
+ import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.Shape
++import androidx.compose.ui.graphics.graphicsLayer
++import androidx.compose.ui.graphics.vector.ImageVector
++import androidx.compose.ui.semantics.Role
++import androidx.compose.ui.semantics.heading
++import androidx.compose.ui.semantics.semantics
++import androidx.compose.ui.semantics.stateDescription
+ import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.text.style.TextAlign
++import androidx.compose.ui.tooling.preview.Preview
+ import androidx.compose.ui.unit.dp
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.thesis.garby.performance.LocalPerformanceProfile
+ import com.thesis.garby.realtime.OperatorAction
+ import com.thesis.garby.realtime.OperatorStatus
+ import com.thesis.garby.realtime.isFresh
+ import com.thesis.garby.realtime.markerSummary
+ import com.thesis.garby.realtime.operatorBlockReason
+ import com.thesis.garby.realtime.operatorOutcomeText
+-import com.thesis.garby.ui.glass.GlassButton
+ import com.thesis.garby.ui.glass.GlassButtonStyle
+ import com.thesis.garby.ui.glass.GlassDialog
+-import com.thesis.garby.ui.glass.GlassPanel
+-import com.thesis.garby.ui.glass.GlassScaffold
+-import com.thesis.garby.ui.glass.GlassShapes
+-import com.thesis.garby.ui.glass.GlassTopBar
+ import com.thesis.garby.ui.glass.RevealWhenLoaded
+ import com.thesis.garby.ui.glass.SkeletonCard
+ import com.thesis.garby.ui.glass.widthCap
+ import com.thesis.garby.ui.theme.GarbyColors
++import com.thesis.garby.ui.theme.GarbyTheme
+ 
+ /** Two sections for robot controls: Standard Operational Controls and Developer Bench Tests. */
+-private enum class ControlsSection(val label: String) {
+-    Control("Controls"),
+-    Developer("Developer")
+-}
++private enum class ControlsSection(val label: String, val accent: Color, val icon: ImageVector) {
++    Control("Controls", Color(0xFF67E8F9), Icons.Rounded.Tune),
++    Developer("Developer", Color(0xFFC4B5FD), Icons.Rounded.Build)
++}
++
++/** Opaque text and substantial glass fills keep controls legible over either backdrop glow. */
++private object ControlGlass {
++    val Background = Color(0xFF081323)
++    val SurfaceTop = Color(0xFF203A56)
++    val SurfaceBottom = Color(0xFF14263D)
++    val Inset = Color(0xFF10243A)
++    val ButtonTop = Color(0xFF314B69)
++    val ButtonBottom = Color(0xFF243B55)
++    val Text = Color(0xFFF8FAFC)
++    val Secondary = Color(0xFFD5E2F1)
++    val Muted = Color(0xFFB4C6DA)
++    val OnAccent = Color(0xFF071427)
++    val DisabledFill = Color(0xFF25354A)
++    val DisabledText = Color(0xFFBBC9DB)
++    val Enabled = Color(0xFFA7F3D0)
++    val Attention = Color(0xFFFCD34D)
++    val Stop = Color(0xFFBE123C)
++}
++
++private val LocalControlsSection = staticCompositionLocalOf { ControlsSection.Control }
+ 
+ /** What the operator is asked before an action that lets the robot move or restarts it. */
+ private data class Confirmation(val title: String, val body: String, val confirm: String)
+@@ -132,7 +200,17 @@
+ @Composable
+ fun ControlsScreen(viewModel: OperatorViewModel) {
+     val state by viewModel.uiState.collectAsStateWithLifecycle()
+-    var section by rememberSaveable { mutableStateOf(ControlsSection.Control) }
++    ControlsContent(state, viewModel::send, viewModel::clearNotice)
++}
++
++@Composable
++private fun ControlsContent(
++    state: OperatorUiState,
++    onSend: (OperatorAction, Int?, Boolean?) -> Unit,
++    onDismissNotice: () -> Unit,
++    initialSection: ControlsSection = ControlsSection.Control
++) {
++    var section by rememberSaveable { mutableStateOf(initialSection) }
+     var confirming by rememberSaveable { mutableStateOf<OperatorAction?>(null) }
+     var gateLidar by rememberSaveable { mutableStateOf(true) }
+     var gateMpu by rememberSaveable { mutableStateOf(true) }
+@@ -144,292 +222,299 @@
+     val fresh = status.isFresh(state.nowMs)
+     val (subtitle, subtitleColor) = when {
+         !state.online -> "This phone is offline" to GarbyColors.Warning
+-        !state.statusLoaded -> "Connecting" to GarbyColors.TextMuted
++        !state.statusLoaded -> "Connecting" to ControlGlass.Muted
++        !state.cloudConnected -> "Cloud link unavailable" to ControlGlass.Attention
+         !fresh -> "GARBY's Pi is not reporting" to GarbyColors.Warning
+         status?.connected != true -> "Pi running · no link to the controllers" to GarbyColors.Warning
++        status?.supported != true -> "Waiting for MCU status" to ControlGlass.Attention
+         else -> "Pi and controllers connected" to GarbyColors.Ok
+     }
+ 
+     fun request(action: OperatorAction) {
+         if (confirmationFor(action) != null) confirming = action
+-        else viewModel.send(action, sensors = sensorMask, fast = fastSpeed)
+-    }
+-
+-    GlassScaffold(
+-        topBar = { GlassTopBar(title = "Controls", subtitle = subtitle, subtitleColor = subtitleColor) }
+-    ) { padding ->
+-        Column(
+-            Modifier
+-                .fillMaxSize()
+-                .padding(padding)
+-                .verticalScroll(rememberScrollState())
+-                .padding(horizontal = 16.dp, vertical = 12.dp),
+-            horizontalAlignment = Alignment.CenterHorizontally,
+-            verticalArrangement = Arrangement.spacedBy(12.dp)
+-        ) {
+-            // Section Switcher: Controls vs Developer
+-            Row(
+-                modifier = Modifier.widthCap().fillMaxWidth(),
+-                horizontalArrangement = Arrangement.spacedBy(8.dp)
++        else onSend(action, sensorMask, fastSpeed)
++    }
++
++    CompositionLocalProvider(LocalControlsSection provides section) {
++        ControlsGlassFrame(
++            section = section, subtitle = subtitle, subtitleColor = subtitleColor
++        ) { padding ->
++            Column(
++                Modifier
++                    .fillMaxSize()
++                    .padding(padding)
++                    .verticalScroll(rememberScrollState())
++                    .padding(horizontal = 16.dp, vertical = 12.dp),
++                horizontalAlignment = Alignment.CenterHorizontally,
++                verticalArrangement = Arrangement.spacedBy(12.dp)
+             ) {
+-                ControlsSection.entries.forEach { item ->
+-                    val selected = item == section
+-                    Box(
+-                        modifier = Modifier
+-                            .weight(1f)
+-                            .clip(GlassShapes.Pill)
+-                            .background(if (selected) GarbyColors.Ember.copy(alpha = 0.35f) else GarbyColors.GlassStrokeFaint)
+-                            .clickable { section = item }
+-                            .padding(vertical = 10.dp),
+-                        contentAlignment = Alignment.Center
+-                    ) {
+-                        Text(
+-                            text = item.label,
+-                            style = MaterialTheme.typography.titleSmall,
+-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+-                            color = if (selected) GarbyColors.TextPrimary else GarbyColors.TextMuted
++                ControlsSectionPicker(section) { section = it }
++                SectionIntro(section)
++
++                RevealWhenLoaded(
++                    loaded = state.statusLoaded,
++                    modifier = Modifier.widthCap().fillMaxWidth(),
++                    skeleton = {
++                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
++                            SkeletonCard("Loading GARBY's state", lines = 3)
++                            SkeletonCard("Loading stop controls", lines = 2)
++                            SkeletonCard("Loading sensor controls", lines = 3)
++                        }
++                    }
++                ) {
++                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
++                        val outcome = state.notice ?: operatorOutcomeText(state.command, state.nowMs)
++                        if (outcome != null) {
++                            ControlPanel(onClick = onDismissNotice, onClickLabel = "Dismiss") {
++                                Text("Last request", style = MaterialTheme.typography.labelLarge, color = ControlGlass.Muted)
++                                Spacer(Modifier.height(4.dp))
++                                Text(outcome, style = MaterialTheme.typography.bodyLarge, color = ControlGlass.Text)
++                            }
++                        }
++
++                        if (section == ControlsSection.Control) {
++                            // Operational Controls Section
++                            StatePanel(status, fresh, state.nowMs)
++
++                            ControlGroup("After an emergency stop") {
++                                listOf(OperatorAction.Continue, OperatorAction.Reverse, OperatorAction.Release).forEach { action ->
++                                    ActionRow(action, state, ::request, primary = action == OperatorAction.Continue)
++                                }
++                                Hint("Continue finishes the stopped route. Reverse drives back to its start. " +
++                                    "Release ends it at idle. The stop button is under every screen.")
++                            }
++
++                            ControlGroup("Obstacle sensing") {
++                                ToggleRow(
++                                    title = "Obstacle sonar",
++                                    value = status?.ultrasonicEnabled.takeIf { fresh },
++                                    onText = "Enabled (controller confirmed)",
++                                    offText = "Disabled; servo at its default view (confirmed)",
++                                    turnOn = OperatorAction.SonarOn, turnOff = OperatorAction.SonarOff,
++                                    state = state, onRequest = ::request
++                                )
++                                ToggleRow(
++                                    title = "Front LiDAR checks",
++                                    value = status?.frontReadOnly?.not().takeIf { fresh },
++                                    onText = "Stopping for what is ahead",
++                                    offText = "Read-only: shown, not stopping",
++                                    turnOn = OperatorAction.FrontReadOnlyOff, turnOff = OperatorAction.FrontReadOnlyOn,
++                                    state = state, onRequest = ::request
++                                )
++                                ToggleRow(
++                                    title = "Side LiDAR checks",
++                                    value = status?.sideReadOnly?.not().takeIf { fresh },
++                                    onText = "Stopping for obstacles beside body",
++                                    offText = "Read-only: shown, not stopping",
++                                    turnOn = OperatorAction.SideReadOnlyOff, turnOff = OperatorAction.SideReadOnlyOn,
++                                    state = state, onRequest = ::request
++                                )
++                                ToggleRow(
++                                    title = "Rear LiDAR checks",
++                                    value = status?.backReadOnly?.not().takeIf { fresh },
++                                    onText = "Enabled",
++                                    offText = "Read-only: shown, not stopping",
++                                    turnOn = OperatorAction.BackReadOnlyOff, turnOff = OperatorAction.BackReadOnlyOn,
++                                    state = state, onRequest = ::request
++                                )
++                            }
++
++                            ControlGroup("System") {
++                                ActionRow(OperatorAction.Reboot, state, ::request, primary = false)
++                                Hint("Manual disposal is on Home; the return to base is on Activity.")
++                                if (fresh && status != null && status.software.isNotBlank()) {
++                                    Hint("Robot software ${status.software}, running ${status.launcherMode}.")
++                                }
++                                if (state.uid.isNotBlank()) {
++                                    Hint("This phone's ID, for GARBY's operator list: ${state.uid}")
++                                }
++                            }
++                        } else {
++                            // Developer Controls Section
++                            DeveloperStatusPanel(status, fresh)
++
++                            ControlGroup("1. Active sensor gates during test") {
++                                FlowRow(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                    verticalArrangement = Arrangement.spacedBy(8.dp)
++                                ) {
++                                    SensorGateChip("LiDAR", gateLidar) { gateLidar = !gateLidar }
++                                    SensorGateChip("Gyro (MPU)", gateMpu) { gateMpu = !gateMpu }
++                                    SensorGateChip("Sonar", gateSonar) { gateSonar = !gateSonar }
++                                }
++                                Hint("Untick to test without that sensor. Gates restore automatically after each test.")
++                            }
++
++                            ControlGroup("2. Motion bench tests") {
++                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                                    Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestF, state, ::request, primary = false) }
++                                    Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestB, state, ::request, primary = false) }
++                                }
++                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                                    Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestL, state, ::request, primary = false) }
++                                    Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestR, state, ::request, primary = false) }
++                                }
++                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                                    Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestL90, state, ::request, primary = false) }
++                                    Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestR90, state, ::request, primary = false) }
++                                }
++                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                                    Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestM1, state, ::request, primary = false) }
++                                    Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestM2, state, ::request, primary = false) }
++                                }
++                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                                    Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestSensors, state, ::request, primary = false) }
++                                    Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevCancel, state, ::request, primary = false) }
++                                }
++                            }
++
++                            ControlGroup("3. Remote directional drive") {
++                                Text("Drive speed", style = MaterialTheme.typography.labelLarge, color = ControlGlass.Secondary)
++                                FlowRow(
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                    verticalArrangement = Arrangement.spacedBy(8.dp)
++                                ) {
++                                    SensorGateChip("Normal · 30 cm/s", !fastSpeed, choice = true) { fastSpeed = false }
++                                    SensorGateChip("Fast · 60 cm/s", fastSpeed, choice = true) { fastSpeed = true }
++                                }
++                                Column(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    horizontalAlignment = Alignment.CenterHorizontally,
++                                    verticalArrangement = Arrangement.spacedBy(10.dp)
++                                ) {
++                                    ControlButton(
++                                        text = "↑ Forward",
++                                        onClick = { request(OperatorAction.DevHoldW) },
++                                        style = GlassButtonStyle.Secondary,
++                                        modifier = Modifier.fillMaxWidth(0.60f)
++                                    )
++                                    Row(
++                                        modifier = Modifier.fillMaxWidth(),
++                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                        verticalAlignment = Alignment.CenterVertically
++                                    ) {
++                                        ControlButton(
++                                            text = "← Spin left",
++                                            onClick = { request(OperatorAction.DevHoldA) },
++                                            style = GlassButtonStyle.Secondary,
++                                            modifier = Modifier.weight(1f)
++                                        )
++                                        ControlButton(
++                                            text = "Stop",
++                                            onClick = { request(OperatorAction.DevHoldStop) },
++                                            danger = true,
++                                            modifier = Modifier.weight(0.8f)
++                                        )
++                                        ControlButton(
++                                            text = "Spin right →",
++                                            onClick = { request(OperatorAction.DevHoldD) },
++                                            style = GlassButtonStyle.Secondary,
++                                            modifier = Modifier.weight(1f)
++                                        )
++                                    }
++                                    ControlButton(
++                                        text = "↓ Backward",
++                                        onClick = { request(OperatorAction.DevHoldS) },
++                                        style = GlassButtonStyle.Secondary,
++                                        modifier = Modifier.fillMaxWidth(0.60f)
++                                    )
++                                }
++                                Hint("Tap direction to drive. Tap Stop or EMERGENCY STOP to halt.")
++                            }
++
++                            ControlGroup("4. RunStart step sequence") {
++                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                                    Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevRunContinue, state, ::request, primary = true) }
++                                    Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevRunUndo, state, ::request, primary = false) }
++                                }
++                                ActionRow(OperatorAction.DevRunClear, state, ::request, primary = false)
++                                Hint("Continues, reverses or clears the step sequence stored in the robot controller.")
++                            }
++                        }
++                    }
++                }
++            }
++        }
++
++        confirming?.let { action ->
++            val text = confirmationFor(action)
++            if (text == null) {
++                confirming = null
++            } else {
++                GlassDialog(onDismissRequest = { confirming = null }) {
++                    Text(text.title, style = MaterialTheme.typography.headlineSmall, color = ControlGlass.Text)
++                    Spacer(Modifier.height(10.dp))
++                    Text(text.body, style = MaterialTheme.typography.bodyMedium, color = ControlGlass.Secondary)
++                    Spacer(Modifier.height(22.dp))
++                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
++                        ControlButton(
++                            text = "Cancel", onClick = { confirming = null },
++                            style = GlassButtonStyle.Secondary, modifier = Modifier.weight(1f)
++                        )
++                        ControlButton(
++                            text = text.confirm,
++                            onClick = {
++                                confirming = null
++                                onSend(action, sensorMask, fastSpeed)
++                            },
++                            modifier = Modifier.weight(1f)
+                         )
+                     }
+                 }
+             }
+-
+-            RevealWhenLoaded(
+-                loaded = state.statusLoaded,
+-                modifier = Modifier.widthCap().fillMaxWidth(),
+-                skeleton = {
+-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+-                        SkeletonCard("Loading GARBY's state", lines = 3)
+-                        SkeletonCard("Loading stop controls", lines = 2)
+-                        SkeletonCard("Loading sensor controls", lines = 3)
+-                    }
+-                }
+-            ) {
+-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+-                    val outcome = state.notice ?: operatorOutcomeText(state.command, state.nowMs)
+-                    if (outcome != null) {
+-                        GlassPanel(onClick = viewModel::clearNotice, onClickLabel = "Dismiss") {
+-                            Text("Last request", style = MaterialTheme.typography.labelLarge, color = GarbyColors.TextMuted)
+-                            Spacer(Modifier.height(4.dp))
+-                            Text(outcome, style = MaterialTheme.typography.bodyLarge, color = GarbyColors.TextPrimary)
+-                        }
+-                    }
+-
+-                    if (section == ControlsSection.Control) {
+-                        // Operational Controls Section
+-                        StatePanel(status, fresh, state.nowMs)
+-
+-                        ControlGroup("After an emergency stop") {
+-                            listOf(OperatorAction.Continue, OperatorAction.Reverse, OperatorAction.Release).forEach { action ->
+-                                ActionRow(action, state, ::request, primary = action == OperatorAction.Continue)
+-                            }
+-                            Hint("Continue finishes the stopped route. Reverse drives back to its start. " +
+-                                "Release ends it at idle. The stop button is under every screen.")
+-                        }
+-
+-                        ControlGroup("Obstacle sensing") {
+-                            ToggleRow(
+-                                title = "Obstacle sonar",
+-                                value = status?.ultrasonicEnabled.takeIf { fresh },
+-                                onText = "Enabled (controller confirmed)",
+-                                offText = "Disabled; servo at its default view (confirmed)",
+-                                turnOn = OperatorAction.SonarOn, turnOff = OperatorAction.SonarOff,
+-                                state = state, onRequest = ::request
+-                            )
+-                            ToggleRow(
+-                                title = "Front LiDAR checks",
+-                                value = status?.frontReadOnly?.not().takeIf { fresh },
+-                                onText = "Stopping for what is ahead",
+-                                offText = "Read-only: shown, not stopping",
+-                                turnOn = OperatorAction.FrontReadOnlyOff, turnOff = OperatorAction.FrontReadOnlyOn,
+-                                state = state, onRequest = ::request
+-                            )
+-                            ToggleRow(
+-                                title = "Side LiDAR checks",
+-                                value = status?.sideReadOnly?.not().takeIf { fresh },
+-                                onText = "Stopping for obstacles beside body",
+-                                offText = "Read-only: shown, not stopping",
+-                                turnOn = OperatorAction.SideReadOnlyOff, turnOff = OperatorAction.SideReadOnlyOn,
+-                                state = state, onRequest = ::request
+-                            )
+-                            ToggleRow(
+-                                title = "Rear LiDAR checks",
+-                                value = status?.backReadOnly?.not().takeIf { fresh },
+-                                onText = "Enabled",
+-                                offText = "Read-only: shown, not stopping",
+-                                turnOn = OperatorAction.BackReadOnlyOff, turnOff = OperatorAction.BackReadOnlyOn,
+-                                state = state, onRequest = ::request
+-                            )
+-                        }
+-
+-                        ControlGroup("System") {
+-                            ActionRow(OperatorAction.Reboot, state, ::request, primary = false)
+-                            Hint("Manual disposal is on Home; the return to base is on Activity.")
+-                            if (fresh && status != null && status.software.isNotBlank()) {
+-                                Hint("Robot software ${status.software}, running ${status.launcherMode}.")
+-                            }
+-                            if (state.uid.isNotBlank()) {
+-                                Hint("This phone's ID, for GARBY's operator list: ${state.uid}")
+-                            }
+-                        }
+-                    } else {
+-                        // Developer Controls Section
+-                        DeveloperStatusPanel(status, fresh)
+-
+-                        ControlGroup("1. Active sensor gates during test") {
+-                            Row(
+-                                modifier = Modifier.fillMaxWidth(),
+-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+-                            ) {
+-                                SensorGateChip("LiDAR", gateLidar) { gateLidar = !gateLidar }
+-                                SensorGateChip("Gyro (MPU)", gateMpu) { gateMpu = !gateMpu }
+-                                SensorGateChip("Sonar", gateSonar) { gateSonar = !gateSonar }
+-                            }
+-                            Hint("Untick to test without that sensor. Gates restore automatically after each test.")
+-                        }
+-
+-                        ControlGroup("2. Motion bench tests") {
+-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestF, state, ::request, primary = false) }
+-                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestB, state, ::request, primary = false) }
+-                            }
+-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestL, state, ::request, primary = false) }
+-                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestR, state, ::request, primary = false) }
+-                            }
+-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestL90, state, ::request, primary = false) }
+-                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestR90, state, ::request, primary = false) }
+-                            }
+-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestM1, state, ::request, primary = false) }
+-                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestM2, state, ::request, primary = false) }
+-                            }
+-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestSensors, state, ::request, primary = false) }
+-                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevCancel, state, ::request, primary = false) }
+-                            }
+-                        }
+-
+-                        ControlGroup("3. Remote directional drive") {
+-                            Row(
+-                                modifier = Modifier.fillMaxWidth(),
+-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+-                                verticalAlignment = Alignment.CenterVertically
+-                            ) {
+-                                Text("Speed:", style = MaterialTheme.typography.bodyMedium, color = GarbyColors.TextMuted)
+-                                SensorGateChip("Normal (30 cm/s)", !fastSpeed) { fastSpeed = false }
+-                                SensorGateChip("Fast (60 cm/s)", fastSpeed) { fastSpeed = true }
+-                            }
+-                            Spacer(Modifier.height(8.dp))
+-                            Column(
+-                                modifier = Modifier.fillMaxWidth(),
+-                                horizontalAlignment = Alignment.CenterHorizontally,
+-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+-                            ) {
+-                                GlassButton(
+-                                    text = "▲ Forward",
+-                                    onClick = { request(OperatorAction.DevHoldW) },
+-                                    style = GlassButtonStyle.Secondary,
+-                                    modifier = Modifier.width(160.dp)
+-                                )
+-                                Row(
+-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+-                                    verticalAlignment = Alignment.CenterVertically
+-                                ) {
+-                                    GlassButton(
+-                                        text = "◀ Spin Left",
+-                                        onClick = { request(OperatorAction.DevHoldA) },
+-                                        style = GlassButtonStyle.Secondary,
+-                                        modifier = Modifier.width(110.dp)
+-                                    )
+-                                    GlassButton(
+-                                        text = "⏹ Stop",
+-                                        onClick = { request(OperatorAction.DevHoldStop) },
+-                                        style = GlassButtonStyle.Primary,
+-                                        modifier = Modifier.width(90.dp)
+-                                    )
+-                                    GlassButton(
+-                                        text = "Spin Right ▶",
+-                                        onClick = { request(OperatorAction.DevHoldD) },
+-                                        style = GlassButtonStyle.Secondary,
+-                                        modifier = Modifier.width(110.dp)
+-                                    )
+-                                }
+-                                GlassButton(
+-                                    text = "▼ Backward",
+-                                    onClick = { request(OperatorAction.DevHoldS) },
+-                                    style = GlassButtonStyle.Secondary,
+-                                    modifier = Modifier.width(160.dp)
+-                                )
+-                            }
+-                            Hint("Tap direction to drive. Tap Stop or EMERGENCY STOP to halt.")
+-                        }
+-
+-                        ControlGroup("4. RunStart step sequence") {
+-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevRunContinue, state, ::request, primary = true) }
+-                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevRunUndo, state, ::request, primary = false) }
+-                            }
+-                            ActionRow(OperatorAction.DevRunClear, state, ::request, primary = false)
+-                            Hint("Continues, reverses or clears the step sequence stored in the robot controller.")
+-                        }
+-                    }
+-                }
+-            }
+-        }
+-    }
+-
+-    confirming?.let { action ->
+-        val text = confirmationFor(action)
+-        if (text == null) {
+-            confirming = null
+-        } else {
+-            GlassDialog(onDismissRequest = { confirming = null }) {
+-                Text(text.title, style = MaterialTheme.typography.headlineSmall, color = GarbyColors.TextPrimary)
+-                Spacer(Modifier.height(10.dp))
+-                Text(text.body, style = MaterialTheme.typography.bodyMedium, color = GarbyColors.TextSecondary)
+-                Spacer(Modifier.height(22.dp))
+-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+-                    GlassButton(
+-                        text = "Cancel", onClick = { confirming = null },
+-                        style = GlassButtonStyle.Secondary, modifier = Modifier.weight(1f)
+-                    )
+-                    GlassButton(
+-                        text = text.confirm,
+-                        onClick = {
+-                            confirming = null
+-                            viewModel.send(action, sensors = sensorMask, fast = fastSpeed)
+-                        },
+-                        modifier = Modifier.weight(1f)
+-                    )
+-                }
+-            }
+-        }
+-    }
+-}
+-
+-@Composable
+-private fun SensorGateChip(label: String, checked: Boolean, onToggle: () -> Unit) {
+-    Box(
++        }
++    }
++}
++
++@Composable
++private fun SensorGateChip(
++    label: String,
++    checked: Boolean,
++    choice: Boolean = false,
++    onToggle: () -> Unit
++) {
++    val accent = LocalControlsSection.current.accent
++    val color = if (choice) accent else if (checked) ControlGlass.Enabled else ControlGlass.Attention
++    val shape = RoundedCornerShape(16.dp)
++    val selection = if (choice) Modifier.selectable(
++        selected = checked, role = Role.RadioButton, onClick = onToggle
++    ) else Modifier.toggleable(value = checked, role = Role.Checkbox, onValueChange = { onToggle() })
++    Row(
+         modifier = Modifier
+-            .clip(GlassShapes.Pill)
+-            .background(if (checked) GarbyColors.Ember.copy(alpha = 0.35f) else GarbyColors.GlassStrokeFaint)
+-            .clickable(onClick = onToggle)
+-            .padding(horizontal = 14.dp, vertical = 8.dp)
++            .heightIn(min = 50.dp)
++            .clip(shape)
++            .background(if (checked) color.copy(alpha = 0.16f) else ControlGlass.Inset)
++            .border(1.5.dp, color.copy(alpha = if (checked) 0.9f else 0.65f), shape)
++            .then(selection)
++            .semantics { stateDescription = if (choice) {
++                if (checked) "Selected" else "Not selected"
++            } else if (checked) "Sensor check on" else "Sensor check off" }
++            .padding(horizontal = 12.dp, vertical = 10.dp),
++        verticalAlignment = Alignment.CenterVertically,
++        horizontalArrangement = Arrangement.spacedBy(8.dp)
+     ) {
+-        Text(
+-            text = (if (checked) "✓ " else "✗ ") + label,
+-            style = MaterialTheme.typography.labelMedium,
+-            fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Normal,
+-            color = if (checked) GarbyColors.TextPrimary else GarbyColors.TextMuted
++        Icon(
++            if (checked) Icons.Rounded.Check else Icons.Rounded.Close,
++            contentDescription = null, tint = color, modifier = Modifier.size(18.dp)
+         )
++        Text(label, style = MaterialTheme.typography.labelLarge,
++            fontWeight = FontWeight.SemiBold, color = ControlGlass.Text)
++        if (!choice) {
++            Text(if (checked) "ON" else "OFF", style = MaterialTheme.typography.labelSmall,
++                fontWeight = FontWeight.Bold, color = color)
++        }
+     }
+ }
+ 
+ @Composable
+ private fun DeveloperStatusPanel(status: OperatorStatus?, fresh: Boolean) {
+-    GlassPanel {
+-        Text("Developer bench status", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
++    ControlPanel {
++        ControlPanelHeading("Bench status", Icons.Rounded.Build)
++        Spacer(Modifier.height(6.dp))
++        val controllersOnline = fresh && status?.connected == true && status?.supported == true
++        StateBadge(if (controllersOnline) "Controllers online" else "Waiting for controllers",
++            if (controllersOnline) ControlGlass.Enabled else ControlGlass.Attention)
+         Spacer(Modifier.height(8.dp))
+         if (status == null || !fresh) {
+             Text(
+@@ -447,7 +532,7 @@
+             InfoLine("Status", statusText, statusColor)
+             val stateText = status.robotState.replace('_', ' ').lowercase()
+                 .replaceFirstChar { it.uppercase() }.ifBlank { "Unknown" }
+-            InfoLine("Robot state", stateText, GarbyColors.TextPrimary)
++            InfoLine("Robot state", stateText, ControlGlass.Text)
+             Spacer(Modifier.height(4.dp))
+             Hint("Developer tests bypass standard route rules for bench checks. The EMERGENCY STOP button halts any test immediately.")
+         }
+@@ -456,13 +541,16 @@
+ 
+ @Composable
+ private fun StatePanel(status: OperatorStatus?, fresh: Boolean, nowMs: Long) {
+-    GlassPanel {
+-        Text("GARBY now", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
++    ControlPanel {
++        ControlPanelHeading("GARBY now", Icons.Rounded.Sensors)
++        Spacer(Modifier.height(6.dp))
++        val controllersOnline = fresh && status?.connected == true && status?.supported == true
++        StateBadge(if (controllersOnline) "Controllers online" else "Waiting for controllers",
++            if (controllersOnline) ControlGlass.Enabled else ControlGlass.Attention)
+         Spacer(Modifier.height(8.dp))
+         if (status == null || !fresh) {
+             Text(
+-                if (status == null) "The robot software has not reported yet. Start it on the Pi " +
+-                    "(run_headless.sh start) and check its internet link."
++                if (status == null) "GARBY has not reported yet. Check the Raspberry Pi's power and internet connection."
+                 else "Last report ${((nowMs - status.updatedAtMs) / 1000L).coerceAtLeast(0L)} s ago. " +
+                     "The robot software is stopped or has no internet.",
+                 style = MaterialTheme.typography.bodyMedium, color = GarbyColors.Warning
+@@ -475,14 +563,14 @@
+             }
+             val stateText = status.robotState.replace('_', ' ').lowercase()
+                 .replaceFirstChar { it.uppercase() }.ifBlank { "Unknown" }
+-            InfoLine("State", stateText, GarbyColors.TextPrimary)
++            InfoLine("State", stateText, ControlGlass.Text)
+             InfoLine("Emergency stop", stop.first, stop.second)
+-            if (status.routeLeg.isNotBlank()) InfoLine("Route step", status.routeLeg, GarbyColors.TextSecondary)
++            if (status.routeLeg.isNotBlank()) InfoLine("Route step", status.routeLeg, ControlGlass.Secondary)
+             if (status.motionHold.isNotBlank()) InfoLine("Held by", status.motionHold, GarbyColors.Warning)
+-            if (status.zones.isNotBlank()) InfoLine("Zones", status.zones.replace(",", ", "), GarbyColors.TextSecondary)
++            if (status.zones.isNotBlank()) InfoLine("Zones", status.zones.replace(",", ", "), ControlGlass.Secondary)
+             val seen = markerSummary(status.people, 0, status.objects)
+-            if (seen != null) InfoLine("In view", seen, GarbyColors.TextSecondary)
+-            if (status.message.isNotBlank()) InfoLine("Controllers", status.message, GarbyColors.TextMuted)
++            if (seen != null) InfoLine("In view", seen, ControlGlass.Secondary)
++            if (status.message.isNotBlank()) InfoLine("Controllers", status.message, ControlGlass.Muted)
+         }
+     }
+ }
+@@ -490,23 +578,27 @@
+ @Composable
+ private fun InfoLine(label: String, value: String, color: Color) {
+     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+-        Text(label, style = MaterialTheme.typography.bodyMedium, color = GarbyColors.TextMuted, modifier = Modifier.weight(0.38f))
++        Text(label, style = MaterialTheme.typography.bodyMedium, color = ControlGlass.Muted, modifier = Modifier.weight(0.38f))
+         Text(value, style = MaterialTheme.typography.bodyMedium, color = color, modifier = Modifier.weight(0.62f))
+     }
+ }
+ 
+ @Composable
+ private fun ControlGroup(title: String, content: @Composable () -> Unit) {
+-    GlassPanel {
+-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+-        Spacer(Modifier.height(10.dp))
+-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
++    ControlPanel {
++        ControlPanelHeading(title, when {
++            title.contains("sensing") || title.contains("sensor") -> Icons.Rounded.Sensors
++            title.startsWith("System") -> Icons.Rounded.Refresh
++            else -> LocalControlsSection.current.icon
++        })
++        Spacer(Modifier.height(14.dp))
++        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { content() }
+     }
+ }
+ 
+ @Composable
+ private fun Hint(text: String) {
+-    Text(text, style = MaterialTheme.typography.bodySmall, color = GarbyColors.TextMuted)
++    Text(text, style = MaterialTheme.typography.bodySmall, color = ControlGlass.Muted)
+ }
+ 
+ /** One action button with the reason underneath when it is not available. */
+@@ -520,12 +612,20 @@
+     val blocked = operatorBlockReason(action, state.status, state.nowMs, state.online, state.sending != null,
+         cloudConnected = state.cloudConnected)
+     Column {
+-        GlassButton(
++        ControlButton(
+             text = action.label,
+             onClick = { onRequest(action) },
+             enabled = blocked == null,
+             loading = state.sending == action,
+             style = if (primary) GlassButtonStyle.Primary else GlassButtonStyle.Secondary,
++            danger = action == OperatorAction.DevCancel,
++            icon = when (action) {
++                OperatorAction.Reboot -> Icons.Rounded.Refresh
++                OperatorAction.Release -> Icons.Rounded.PanTool
++                OperatorAction.Reverse, OperatorAction.DevRunUndo -> Icons.Rounded.Replay
++                OperatorAction.SonarOn, OperatorAction.SonarOff, OperatorAction.DevTestSensors -> Icons.Rounded.Sensors
++                else -> if (action.isDeveloperAction) Icons.Rounded.Build else Icons.Rounded.PlayArrow
++            },
+             modifier = Modifier.fillMaxWidth()
+         )
+         if (blocked != null && state.sending != action) {
+@@ -547,20 +647,266 @@
+     state: OperatorUiState,
+     onRequest: (OperatorAction) -> Unit
+ ) {
+-    Column {
+-        Text(title, style = MaterialTheme.typography.bodyLarge, color = GarbyColors.TextPrimary)
++    Column(
++        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
++            .background(ControlGlass.Inset)
++            .border(1.dp, Color(0xFF496682), RoundedCornerShape(20.dp))
++            .padding(14.dp),
++        verticalArrangement = Arrangement.spacedBy(8.dp)
++    ) {
++        FlowRow(
++            horizontalArrangement = Arrangement.spacedBy(10.dp),
++            verticalArrangement = Arrangement.spacedBy(6.dp)
++        ) {
++            Text(title, style = MaterialTheme.typography.titleSmall,
++                fontWeight = FontWeight.SemiBold, color = ControlGlass.Text)
++            StateBadge(
++                when (value) { true -> "CHECKS ON"; false -> if (turnOn == OperatorAction.SonarOn) "OFF" else "READ ONLY"; null -> "UNKNOWN" },
++                when (value) { true -> ControlGlass.Enabled; else -> ControlGlass.Attention }
++            )
++        }
+         Text(
+-            when (value) {
+-                true -> onText
+-                false -> offText
+-                null -> "Unknown: waiting for confirmation"
+-            },
+-            style = MaterialTheme.typography.bodySmall,
+-            color = if (value == false) GarbyColors.Warning else GarbyColors.TextMuted
++            when (value) { true -> onText; false -> offText; null -> "Waiting for controller confirmation" },
++            style = MaterialTheme.typography.bodySmall, color = ControlGlass.Secondary
+         )
+         if (value != null) {
+-            Spacer(Modifier.height(6.dp))
+             ActionRow(if (value) turnOff else turnOn, state, onRequest, primary = false)
+         }
+     }
+ }
++
++/** Static navy glass with cached cyan/violet light; no bitmap or live-blur allocation. */
++@Composable
++private fun ControlsGlassFrame(
++    section: ControlsSection,
++    subtitle: String,
++    subtitleColor: Color,
++    content: @Composable (PaddingValues) -> Unit
++) {
++    Box(Modifier.fillMaxSize().background(ControlGlass.Background)) {
++        Box(Modifier.fillMaxSize().drawWithCache {
++            val upper = Brush.radialGradient(
++                listOf(Color(0xFF164E63).copy(alpha = 0.75f), Color.Transparent),
++                center = Offset(size.width * 0.08f, size.height * 0.12f),
++                radius = size.maxDimension * 0.65f
++            )
++            val lower = Brush.radialGradient(
++                listOf(Color(0xFF4C1D95).copy(alpha = 0.45f), Color.Transparent),
++                center = Offset(size.width * 0.96f, size.height * 0.70f),
++                radius = size.maxDimension * 0.6f
++            )
++            onDrawBehind { drawRect(upper); drawRect(lower) }
++        })
++        Scaffold(
++            containerColor = Color.Transparent,
++            contentColor = ControlGlass.Text,
++            contentWindowInsets = WindowInsets.safeDrawing,
++            topBar = {
++                Box(Modifier.fillMaxWidth()
++                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
++                    .padding(horizontal = 12.dp, vertical = 8.dp)) {
++                    ControlPanel(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
++                        Row(verticalAlignment = Alignment.CenterVertically,
++                            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
++                            Icon(section.icon, contentDescription = null, tint = section.accent,
++                                modifier = Modifier.size(26.dp))
++                            Column(Modifier.weight(1f)) {
++                                Text(section.label, style = MaterialTheme.typography.titleLarge,
++                                    fontWeight = FontWeight.Bold, color = ControlGlass.Text,
++                                    modifier = Modifier.semantics { heading() })
++                                Text(subtitle, style = MaterialTheme.typography.labelMedium, color = subtitleColor)
++                            }
++                        }
++                    }
++                }
++            },
++            content = content
++        )
++    }
++}
++
++@Composable
++private fun ControlsSectionPicker(selected: ControlsSection, onSelect: (ControlsSection) -> Unit) {
++    Row(Modifier.widthCap().fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
++        ControlsSection.entries.forEach { section ->
++            val active = selected == section
++            val shape = RoundedCornerShape(22.dp)
++            val ink = if (active) ControlGlass.OnAccent else ControlGlass.Text
++            Column(
++                Modifier.weight(1f).heightIn(min = 82.dp)
++                    .liquidSurface(shape, if (active) listOf(section.accent, section.accent)
++                        else listOf(ControlGlass.SurfaceTop, ControlGlass.SurfaceBottom))
++                    .selectable(selected = active, role = Role.Tab, onClick = { onSelect(section) })
++                    .padding(14.dp),
++                verticalArrangement = Arrangement.spacedBy(6.dp)
++            ) {
++                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
++                    Icon(section.icon, contentDescription = null, tint = ink, modifier = Modifier.size(22.dp))
++                    Spacer(Modifier.weight(1f))
++                    if (active) Icon(Icons.Rounded.Check, contentDescription = "Selected", tint = ink,
++                        modifier = Modifier.size(18.dp))
++                }
++                Text(section.label, style = MaterialTheme.typography.titleSmall,
++                    fontWeight = FontWeight.Bold, color = ink)
++            }
++        }
++    }
++}
++
++@Composable
++private fun SectionIntro(section: ControlsSection) {
++    Column(Modifier.widthCap().fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
++        verticalArrangement = Arrangement.spacedBy(4.dp)) {
++        Text(if (section == ControlsSection.Control) "Robot controls" else "Developer tools",
++            style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
++            color = ControlGlass.Text)
++        Text(if (section == ControlsSection.Control) "Recovery, obstacle sensing and system settings"
++            else "Sensor gates, motion tests and remote drive",
++            style = MaterialTheme.typography.bodyMedium, color = ControlGlass.Secondary)
++    }
++}
++
++/** Bright rim and a fixed specular reflection suggest liquid glass without an animated shader. */
++private fun Modifier.liquidSurface(shape: Shape, colors: List<Color>): Modifier =
++    clip(shape)
++        .background(Brush.linearGradient(colors))
++        .drawWithCache {
++            val reflection = Brush.linearGradient(
++                0f to Color.White.copy(alpha = 0.12f),
++                0.38f to Color.White.copy(alpha = 0.025f),
++                0.60f to Color.Transparent,
++                1f to Color.White.copy(alpha = 0.025f),
++                start = Offset.Zero, end = Offset(size.width, size.height)
++            )
++            onDrawBehind { drawRect(reflection) }
++        }
++        .border(1.2.dp, Brush.linearGradient(listOf(
++            Color.White.copy(alpha = 0.65f), Color.White.copy(alpha = 0.18f), Color.White.copy(alpha = 0.32f)
++        )), shape)
++
++@Composable
++private fun ControlPanel(
++    modifier: Modifier = Modifier,
++    contentPadding: PaddingValues = PaddingValues(18.dp),
++    onClick: (() -> Unit)? = null,
++    onClickLabel: String? = null,
++    content: @Composable ColumnScope.() -> Unit
++) {
++    val shape = RoundedCornerShape(26.dp)
++    val reduced = LocalPerformanceProfile.current.reducedEffects
++    val interaction = if (onClick != null) Modifier.clickable(
++        role = Role.Button, onClickLabel = onClickLabel, onClick = onClick
++    ) else Modifier
++    Column(
++        modifier.then(if (reduced) Modifier else Modifier.shadow(10.dp, shape))
++            .liquidSurface(shape, listOf(ControlGlass.SurfaceTop, ControlGlass.SurfaceBottom))
++            .then(interaction).padding(contentPadding),
++        content = content
++    )
++}
++
++@Composable
++private fun ControlPanelHeading(title: String, icon: ImageVector) {
++    val accent = LocalControlsSection.current.accent
++    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
++        modifier = Modifier.semantics { heading() }) {
++        Box(Modifier.size(34.dp).clip(RoundedCornerShape(11.dp))
++            .background(accent.copy(alpha = 0.14f)).border(1.dp, accent.copy(alpha = 0.6f), RoundedCornerShape(11.dp)),
++            contentAlignment = Alignment.Center) {
++            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(19.dp))
++        }
++        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
++            color = ControlGlass.Text)
++    }
++}
++
++@Composable
++private fun StateBadge(text: String, color: Color) {
++    Text(text, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
++        color = color, modifier = Modifier.clip(RoundedCornerShape(8.dp))
++            .background(color.copy(alpha = 0.10f)).border(1.dp, color.copy(alpha = 0.55f), RoundedCornerShape(8.dp))
++            .padding(horizontal = 8.dp, vertical = 5.dp))
++}
++
++@Composable
++private fun ControlButton(
++    text: String,
++    onClick: () -> Unit,
++    modifier: Modifier = Modifier,
++    style: GlassButtonStyle = GlassButtonStyle.Primary,
++    enabled: Boolean = true,
++    loading: Boolean = false,
++    danger: Boolean = false,
++    icon: ImageVector? = null
++) {
++    val section = LocalControlsSection.current
++    val interaction = remember { MutableInteractionSource() }
++    val pressed by interaction.collectIsPressedAsState()
++    val reduced = LocalPerformanceProfile.current.reducedEffects
++    val scale = if (reduced) rememberUpdatedState(1f) else animateFloatAsState(
++        targetValue = if (pressed && enabled && !loading) 0.98f else 1f,
++        animationSpec = tween(120), label = "controlPress"
++    )
++    val primary = style == GlassButtonStyle.Primary
++    val fill = when {
++        !enabled -> listOf(ControlGlass.DisabledFill, ControlGlass.DisabledFill)
++        danger -> listOf(ControlGlass.Stop, Color(0xFF881337))
++        primary -> listOf(section.accent, if (section == ControlsSection.Control) Color(0xFFCFFAFE) else Color(0xFFEDE9FE))
++        else -> listOf(ControlGlass.ButtonTop, ControlGlass.ButtonBottom)
++    }
++    val ink = when {
++        !enabled -> ControlGlass.DisabledText
++        danger -> Color.White
++        primary -> ControlGlass.OnAccent
++        else -> ControlGlass.Text
++    }
++    val leading = if (!enabled) Icons.Rounded.Lock else icon
++    Row(
++        modifier.then(if (reduced) Modifier else Modifier.graphicsLayer { scaleX = scale.value; scaleY = scale.value })
++            .heightIn(min = 56.dp).liquidSurface(RoundedCornerShape(18.dp), fill)
++            .clickable(interactionSource = interaction, indication = ripple(color = ink),
++                enabled = enabled && !loading, role = Role.Button, onClick = onClick)
++            .padding(horizontal = 14.dp, vertical = 14.dp),
++        verticalAlignment = Alignment.CenterVertically,
++        horizontalArrangement = Arrangement.Center
++    ) {
++        if (loading) {
++            CircularProgressIndicator(color = ink, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
++            Spacer(Modifier.width(8.dp))
++        } else if (leading != null) {
++            Icon(leading, contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))
++            Spacer(Modifier.width(8.dp))
++        }
++        Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
++            color = ink, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
++    }
++}
++
++private const val CONTROLS_PREVIEW_NOW = 1_800_000_000_000L
++
++private fun previewControlsState(developer: Boolean) = OperatorUiState(
++    status = OperatorStatus(updatedAtMs = CONTROLS_PREVIEW_NOW, supported = true, connected = true,
++        emergencyStopped = !developer, ultrasonicEnabled = true, canConfigure = true,
++        canRelease = true, canContinue = true, canReverse = true, canReset = true,
++        readOnlyAllowed = true, robotState = "IDLE", developerEnabled = true,
++        message = "Controller settings confirmed"),
++    statusLoaded = true, nowMs = CONTROLS_PREVIEW_NOW, online = true, cloudConnected = true
++)
++
++@Preview(name = "Controls · cyan glass", widthDp = 400, heightDp = 1500, showBackground = true)
++@Composable
++private fun ControlsGlassPreview() {
++    GarbyTheme { ControlsContent(previewControlsState(false), { _, _, _ -> }, {}) }
++}
++
++@Preview(name = "Developer · violet glass", widthDp = 400, heightDp = 2100, showBackground = true)
++@Composable
++private fun DeveloperGlassPreview() {
++    GarbyTheme { ControlsContent(previewControlsState(true), { _, _, _ -> }, {}, ControlsSection.Developer) }
++}
++
++@Preview(name = "Controls · large text", widthDp = 360, heightDp = 1600, fontScale = 1.5f)
++@Composable
++private fun ControlsLargeTextPreview() {
++    GarbyTheme { ControlsContent(previewControlsState(false), { _, _, _ -> }, {}) }
++}
+--- a/README.md
++++ b/README.md
+@@ -39,7 +39,10 @@
+   the Pi and both controllers. Each is offered only when the robot's controllers have confirmed
+   the state it needs, says why when it is not, asks for confirmation where the robot may move,
+   and shows the outcome of the last request. Only phones on the robot's operator list can send
+-  them; the phone's ID is shown at the bottom of the tab.
++  them; the phone's ID is shown at the bottom of the tab. The cyan **Controls** section and
++  violet **Developer** section have distinct glass panels, bright labels and outlined buttons.
++  Developer groups the sensor gates, motion tests, remote directions and saved-sequence controls.
++  Sensor chips say **ON/OFF**; disabled actions show a lock and the reason. Tap a section to switch.
+ - **Map:** GARBY's LiDAR scan, front at the top, with a red dot for a likely person (person-sized
+   and seen moving), amber for another moving object and an orange square for an object standing
+   between the hallway walls. It is live only while the tab is open, and says "stale" as soon as
+--- a/SYSTEM_ARCHITECTURE.md
++++ b/SYSTEM_ARCHITECTURE.md
+@@ -31,6 +31,23 @@
+ after reconnect. Generic IDLE does not prove arrival. The last arrival is historical while
+ current location can become in transit or unknown. This is route-completion telemetry from
+ open-loop travel, not an independently measured physical position.
++
++## Controls presentation — 2026-11-17
++
++`ControlsScreen.kt` owns a scoped navy glass palette: cyan for operation, violet for Developer,
++opaque foreground text, explicit status labels, outlined insets and bright selected sections.
++The UI is split into a state-bound `ControlsScreen` and previewable `ControlsContent`. The latter
++receives the existing three-argument `OperatorViewModel.send` callback and notice dismissal.
++Its `ControlButton` uses the same enabled/loading state and command gate as before.
++
++Glass surfaces cache static gradients and edge reflections; the page does not decode a backdrop
++bitmap or allocate live-blur/shader targets. Button feedback is only on interaction, and the
++conservative performance profile skips shadows and scale animation. Sensor/speed selectors
++wrap and expose checkbox/radio semantics; action labels wrap rather than being ellipsized.
++Existing action IDs, confirmations, request payloads and motion behavior are unchanged.
++
++Android Studio previews cover Controls, Developer and 1.5× text. A separately rendered vector
++layout reference is labelled as a design reference; it is not Android runtime evidence.
+ 
+ ## Responsibilities
+ 
+--- a/PATCH_NOTES.md
++++ b/PATCH_NOTES.md
+@@ -1,4 +1,21 @@
+ # GARBY Mobile App - Patch Notes
++
++## Controls and Developer glass redesign — 2026-11-17
++
++- Controls uses cyan and Developer uses violet over a navy glass backdrop, with separate
++  section tiles, reflective rims, deeper surfaces, bright opaque text and clearer headings.
++- Action buttons keep readable labels when disabled, with lock icons and the existing reason.
++  Sensor gates explicitly show ON/OFF, with checkbox/radio semantics; sensor mode cards show
++  CHECKS ON, READ ONLY, OFF or UNKNOWN. Speed chips wrap on narrow screens.
++- The directional pad uses available width instead of fixed button widths. Stop/cancel actions
++  remain red, separated from the cyan/violet selection colors. Press feedback is brief; the
++  conservative profile retains its no-animation path. No live blur, shaders or new bitmaps.
++- Existing action bindings, operator gates, confirmations, sensor mask and send arguments are
++  retained. All styling is scoped to ControlsScreen.kt; other screens keep their design.
++- Includes normal, Developer and enlarged-text Android Studio previews plus a labelled design
++  reference. Static/scope/contrast checks passed; full Android compile/lint could not start
++  because this host cannot download uncached Gradle. Device appearance remains unverified.
++  Windows directory/SDK/build paths are unchanged. MCU upload: None for this UI-only task.
+ 
+ ## Operator ViewModel compilation correction — 2026-11-17
+ 

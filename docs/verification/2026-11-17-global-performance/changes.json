@@ -1,0 +1,125 @@
+{
+  "date": "2026-11-17",
+  "scope": "App-wide monitoring, transparent floating dock and original palette",
+  "files": [
+    {
+      "path": "app/src/main/java/com/thesis/garby/OperatorViewModel.kt",
+      "status": "modified",
+      "beforeSha256": "9cf11f975fad678d946f5700e5061b35e0289393dd9fd560aceff19423e94aa7",
+      "afterSha256": "636a80149d576c387d451d49244dd2ff8b5213fa64d7a959bdaa9e035aadd246",
+      "purpose": "Callback-based authentication/connectivity, shared clock and distinct stop-state projection; existing send gate retained."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/MainActivity.kt",
+      "status": "modified",
+      "beforeSha256": "9eb290218eef63f183ed46126361e0f3f7bc91690df422089de0c8c5ef34cc14",
+      "afterSha256": "e5484970bdb5425a1c670390c66d691041fc92b24381b1aff2977ced10a998ed",
+      "purpose": "Isolate dock observation from navigation and overlay measured dock on the full page."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/ReturnViewModel.kt",
+      "status": "modified",
+      "beforeSha256": "85d4e2ac26d033e3e910742da459e55f6cbb81d52422afc7379254a10a43aa34",
+      "afterSha256": "0b0d347991d06811b400eccb00e57590f003d7e2527f639f0ecbdf68ce95e440",
+      "purpose": "Use shared time and stop/reset monitoring immediately when unobserved."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/realtime/MonitoringFlow.kt",
+      "status": "modified",
+      "beforeSha256": "39e00626da1c433ff7755be800130887beb55e59fb6a8d47d578cd1f99665eb8",
+      "afterSha256": "31054417ada970a21df1621dcdec6c6b59e11015eea04698e3bff721a3b65410",
+      "purpose": "Shared cancellable, conflated foreground clock producer."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/realtime/GarbyRealtimeDb.kt",
+      "status": "modified",
+      "beforeSha256": "4e35a3e2b8d2fbbe349ea1e861cc8671151f4c2a68d517f82fa12d386f708e21",
+      "afterSha256": "f655f4673885084af40edf44919c9ea17354093263266d1f8e88e0c6a01966d7",
+      "purpose": "Expose one shared monitoring clock alongside existing listener sharing."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/realtime/DeviceViewModel.kt",
+      "status": "modified",
+      "beforeSha256": "2a2785f75492ed428e09d85724299df1e8ae21760a1f053e80ba6cc7ccc93c71",
+      "afterSha256": "8defd5405be046e4bcbf3e1737b228177ec9bf24c1869551d3f27cc909a2ce06",
+      "purpose": "Downsample the shared clock to existing dashboard freshness cadence."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/realtime/Constants.kt",
+      "status": "modified",
+      "beforeSha256": "230bd16fad57f2e069a06bca6b9d9629db25cd929da78393402f828b4da7b872",
+      "afterSha256": "30882fc92ea9ebd032878a40d14374095b19deed59704fbf0ded9d85dbbe3308",
+      "purpose": "Clarify that the existing one-second interval is shared."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/ui/BottomBar.kt",
+      "status": "modified",
+      "beforeSha256": "2be3f9697a172f3b0f7a96bd467335b342f7b33c82e6f3f5b7b3ac90e5ef4080",
+      "afterSha256": "3b9376d410c1358481108cb7bce1775d2606bfd975e68dcaeaf8b81461206009",
+      "purpose": "Transparent dock exterior, measured content inset, scoped state and reduced-effects handling."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/ui/glass/GlassKit.kt",
+      "status": "modified",
+      "beforeSha256": "a29647a71d5d81f2b045fa689a74d0590f75e5a13f96378ec76cd81c4c886021",
+      "afterSha256": "7ca284e170702a8d3a445852796dcbc7e5b223e8b511839f9dc6b955865a9344",
+      "purpose": "Apply floating-dock clearance to page content while background remains full size."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/ControlsScreen.kt",
+      "status": "modified",
+      "beforeSha256": "915de06a23f9f5ba0ac463b2e9fa085ca7c91b057fab6b1d03d554c9292a73cf",
+      "afterSha256": "39cab7657f2eacab78e6cd0e7292c7a4d1ce7532f82f0b27f11ac9a92007bb2b",
+      "purpose": "Restore original red/rose palette and respect floating-dock content clearance."
+    },
+    {
+      "path": "app/src/test/java/com/thesis/garby/realtime/MonitoringFlowTest.kt",
+      "status": "modified",
+      "beforeSha256": "c7a65c93010a772e6e5113318454bf43ec132cef72b9d317fa885b86d4646519",
+      "afterSha256": "8a7a0e37329ed4e72f6c0c15a0c6ae1d721d1ee1fec3fec6cf983a7451724b55",
+      "purpose": "Virtual clock fan-out, producer cancellation and fresh restart cases."
+    },
+    {
+      "path": "app/src/test/java/com/thesis/garby/OperatorApiContractTest.kt",
+      "status": "modified",
+      "beforeSha256": "eebf41239db1437d741b9b133d65afa5333a70298e544e1705beaa209a80a317",
+      "afterSha256": "9e38a71dac566ea47ffe1cf8dfc811d3c6c083e868336603b8c49b07c829ec14",
+      "purpose": "Map/clock burst suppression and exact stale/request expiry cases for the dock."
+    },
+    {
+      "path": "tools/static_quality_check.py",
+      "status": "modified",
+      "beforeSha256": "cf9aab2141909d15f170c61c8e084932d8862a7b19bad30a12f39206adbe4b90",
+      "afterSha256": "2c94cd26ed1ccc65b4db9e9f5a7282d96ffecad55d438311f3e1c320de8c9581",
+      "purpose": "Prevent global full-state navigation subscriptions, repeated monitor polling and opaque dock strip."
+    },
+    {
+      "path": "README.md",
+      "status": "modified",
+      "beforeSha256": "054bed389d92f79b38fcabe6b1bd2d166b0a0311408bd54c1c2582c96409005d",
+      "afterSha256": "f0178a5152925099360dfef1b4754a49054fe3fa561f856c8109dc91f3ad733f",
+      "purpose": "Document floating dock and original Controls/Developer palette."
+    },
+    {
+      "path": "SYSTEM_ARCHITECTURE.md",
+      "status": "modified",
+      "beforeSha256": "2c03f1e6ea8e269a34b0c49ea9623752ec39a0f609326c3b2a3585dd4f75c116",
+      "afterSha256": "8591be7279a032666ed73dcd1a699f94410244406ca2668f38a703ac58d95939",
+      "purpose": "Document shared lifecycle, state observation and content insets."
+    },
+    {
+      "path": "PATCH_NOTES.md",
+      "status": "modified",
+      "beforeSha256": "3d2b93a5c352483181a0135a588ac7b42b98860c9eb34e595f3d143d3bd0dbfe",
+      "afterSha256": "cb23d7becdeab6e920a187dd3beddadc571ee19b951c61e5c461c77f28bf8214",
+      "purpose": "Dated implementation and verification limitations."
+    }
+  ],
+  "evidenceDirectory": "docs/verification/2026-11-17-global-performance",
+  "unchangedWindowsConfiguration": [
+    "local.properties",
+    "settings.gradle.kts",
+    "gradle.properties",
+    "app/build.gradle.kts"
+  ]
+}

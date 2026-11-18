@@ -1,0 +1,18 @@
+{
+  "command": [
+    "bash",
+    "gradlew",
+    ":app:compileDebugKotlin",
+    ":app:testDebugUnitTest",
+    ":app:lintDebug",
+    ":app:assembleBenchmark",
+    "--no-daemon"
+  ],
+  "environment": {
+    "GRADLE_USER_HOME": "/tmp/garby-render-stalls-gradle"
+  },
+  "exit_code": 1,
+  "seconds": 0.473,
+  "log": "gradle.log",
+  "status": "blocked before compilation"
+}

@@ -1,0 +1,2 @@
+PASS: action button bindings, remote requests, sensor actions, confirmation bodies, sensor mask and existing operator gate retained.
+PASS: Kotlin delimiters balanced (source check, not compilation).

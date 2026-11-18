@@ -1,0 +1,58 @@
+[
+  {
+    "use": "body text",
+    "text": "#F8FAFC",
+    "fill": "#203A56",
+    "whiteSheenAlpha": 0.12,
+    "contrastRatio": 7.75
+  },
+  {
+    "use": "secondary text",
+    "text": "#D5E2F1",
+    "fill": "#203A56",
+    "whiteSheenAlpha": 0.12,
+    "contrastRatio": 6.17
+  },
+  {
+    "use": "helper text",
+    "text": "#B4C6DA",
+    "fill": "#203A56",
+    "whiteSheenAlpha": 0.12,
+    "contrastRatio": 4.65
+  },
+  {
+    "use": "secondary button",
+    "text": "#F8FAFC",
+    "fill": "#314B69",
+    "whiteSheenAlpha": 0.12,
+    "contrastRatio": 6.14
+  },
+  {
+    "use": "disabled button",
+    "text": "#BBC9DB",
+    "fill": "#25354A",
+    "whiteSheenAlpha": 0.12,
+    "contrastRatio": 5.1
+  },
+  {
+    "use": "cyan selection",
+    "text": "#071427",
+    "fill": "#67E8F9",
+    "whiteSheenAlpha": 0.12,
+    "contrastRatio": 13.22
+  },
+  {
+    "use": "violet selection",
+    "text": "#071427",
+    "fill": "#C4B5FD",
+    "whiteSheenAlpha": 0.12,
+    "contrastRatio": 10.82
+  },
+  {
+    "use": "stop button",
+    "text": "#FFFFFF",
+    "fill": "#BE123C",
+    "whiteSheenAlpha": 0.12,
+    "contrastRatio": 5.36
+  }
+]

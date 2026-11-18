@@ -1,0 +1,668 @@
+diff --git a/app/src/main/java/com/thesis/garby/ControlsScreen.kt b/app/src/main/java/com/thesis/garby/ControlsScreen.kt
+index 140995b..9413282 100644
+--- a/app/src/main/java/com/thesis/garby/ControlsScreen.kt
++++ b/app/src/main/java/com/thesis/garby/ControlsScreen.kt
+@@ -1,6 +1,9 @@
+ package com.thesis.garby
+ 
++import androidx.compose.foundation.background
++import androidx.compose.foundation.clickable
+ import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.Row
+ import androidx.compose.foundation.layout.Spacer
+@@ -8,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.height
+ import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.width
+ import androidx.compose.foundation.rememberScrollState
+ import androidx.compose.foundation.verticalScroll
+ import androidx.compose.material3.MaterialTheme
+@@ -19,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
+ import androidx.compose.runtime.setValue
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
+ import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.unit.dp
+@@ -34,12 +39,19 @@ import com.thesis.garby.ui.glass.GlassButtonStyle
+ import com.thesis.garby.ui.glass.GlassDialog
+ import com.thesis.garby.ui.glass.GlassPanel
+ import com.thesis.garby.ui.glass.GlassScaffold
++import com.thesis.garby.ui.glass.GlassShapes
+ import com.thesis.garby.ui.glass.GlassTopBar
+ import com.thesis.garby.ui.glass.RevealWhenLoaded
+ import com.thesis.garby.ui.glass.SkeletonCard
+ import com.thesis.garby.ui.glass.widthCap
+ import com.thesis.garby.ui.theme.GarbyColors
+ 
++/** Two sections for robot controls: Standard Operational Controls and Developer Bench Tests. */
++private enum class ControlsSection(val label: String) {
++    Control("Controls"),
++    Developer("Developer")
++}
++
+ /** What the operator is asked before an action that lets the robot move or restarts it. */
+ private data class Confirmation(val title: String, val body: String, val confirm: String)
+ 
+@@ -84,17 +96,50 @@ private fun confirmationFor(action: OperatorAction): Confirmation? = when (actio
+             "the robot software restarts.",
+         "Set read-only"
+     )
++    OperatorAction.SideReadOnlyOn -> Confirmation(
++        "Set side LiDAR checks to read-only?",
++        "The distances are still shown, but they no longer stop GARBY beside its body. Front and rear " +
++            "clearance, missing scans and the emergency stop still do. It is switched back on when " +
++            "the robot software restarts.",
++        "Set read-only"
++    )
++    OperatorAction.DevTestF, OperatorAction.DevTestB, OperatorAction.DevTestL,
++    OperatorAction.DevTestR, OperatorAction.DevTestL90, OperatorAction.DevTestR90,
++    OperatorAction.DevTestM1, OperatorAction.DevTestM2 -> Confirmation(
++        "Run developer test: ${action.label}?",
++        "GARBY will execute this bench motion test under the selected sensor gates.\n\n" +
++            "Ensure the test area is clear. EMERGENCY STOP stops it immediately.",
++        "Run test"
++    )
++    OperatorAction.DevRunContinue -> Confirmation(
++        "Continue RunStart list?",
++        "Resumes executing the saved step list from where it stopped.",
++        "Continue"
++    )
++    OperatorAction.DevRunUndo -> Confirmation(
++        "Undo RunStart list?",
++        "Reverses the executed steps back to the starting position.",
++        "Undo"
++    )
+     else -> null
+ }
+ 
+ /**
+- * The Pi monitor's Controls tab on the phone. Every button is enabled from what the controllers
+- * confirmed to the Pi, and every request goes through the gate the Pi's own buttons use.
++ * The Controls screen divided into two sections:
++ * - Controls: Operation, stop recovery, obstacle sensing (front/side/rear/sonar), system restart.
++ * - Developer: Bench motion tests, sensor gating, remote directional drive, and RunStart lists.
+  */
+ @Composable
+ fun ControlsScreen(viewModel: OperatorViewModel) {
+     val state by viewModel.uiState.collectAsStateWithLifecycle()
++    var section by rememberSaveable { mutableStateOf(ControlsSection.Control) }
+     var confirming by rememberSaveable { mutableStateOf<OperatorAction?>(null) }
++    var gateLidar by rememberSaveable { mutableStateOf(true) }
++    var gateMpu by rememberSaveable { mutableStateOf(true) }
++    var gateSonar by rememberSaveable { mutableStateOf(true) }
++    var fastSpeed by rememberSaveable { mutableStateOf(false) }
++
++    val sensorMask = (if (gateLidar) 1 else 0) or (if (gateMpu) 2 else 0) or (if (gateSonar) 4 else 0)
+     val status = state.status
+     val fresh = status.isFresh(state.nowMs)
+     val (subtitle, subtitleColor) = when {
+@@ -106,7 +151,8 @@ fun ControlsScreen(viewModel: OperatorViewModel) {
+     }
+ 
+     fun request(action: OperatorAction) {
+-        if (confirmationFor(action) != null) confirming = action else viewModel.send(action)
++        if (confirmationFor(action) != null) confirming = action
++        else viewModel.send(action, sensors = sensorMask, fast = fastSpeed)
+     }
+ 
+     GlassScaffold(
+@@ -121,6 +167,32 @@ fun ControlsScreen(viewModel: OperatorViewModel) {
+             horizontalAlignment = Alignment.CenterHorizontally,
+             verticalArrangement = Arrangement.spacedBy(12.dp)
+         ) {
++            // Section Switcher: Controls vs Developer
++            Row(
++                modifier = Modifier.widthCap().fillMaxWidth(),
++                horizontalArrangement = Arrangement.spacedBy(8.dp)
++            ) {
++                ControlsSection.entries.forEach { item ->
++                    val selected = item == section
++                    Box(
++                        modifier = Modifier
++                            .weight(1f)
++                            .clip(GlassShapes.Pill)
++                            .background(if (selected) GarbyColors.Ember.copy(alpha = 0.35f) else GarbyColors.GlassStrokeFaint)
++                            .clickable { section = item }
++                            .padding(vertical = 10.dp),
++                        contentAlignment = Alignment.Center
++                    ) {
++                        Text(
++                            text = item.label,
++                            style = MaterialTheme.typography.titleSmall,
++                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
++                            color = if (selected) GarbyColors.TextPrimary else GarbyColors.TextMuted
++                        )
++                    }
++                }
++            }
++
+             RevealWhenLoaded(
+                 loaded = state.statusLoaded,
+                 modifier = Modifier.widthCap().fillMaxWidth(),
+@@ -133,7 +205,6 @@ fun ControlsScreen(viewModel: OperatorViewModel) {
+                 }
+             ) {
+                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+-                    StatePanel(status, fresh, state.nowMs)
+                     val outcome = state.notice ?: operatorOutcomeText(state.command, state.nowMs)
+                     if (outcome != null) {
+                         GlassPanel(onClick = viewModel::clearNotice, onClickLabel = "Dismiss") {
+@@ -142,47 +213,165 @@ fun ControlsScreen(viewModel: OperatorViewModel) {
+                             Text(outcome, style = MaterialTheme.typography.bodyLarge, color = GarbyColors.TextPrimary)
+                         }
+                     }
+-                    ControlGroup("After an emergency stop") {
+-                        listOf(OperatorAction.Continue, OperatorAction.Reverse, OperatorAction.Release).forEach { action ->
+-                            ActionRow(action, state, ::request, primary = action == OperatorAction.Continue)
++
++                    if (section == ControlsSection.Control) {
++                        // Operational Controls Section
++                        StatePanel(status, fresh, state.nowMs)
++
++                        ControlGroup("After an emergency stop") {
++                            listOf(OperatorAction.Continue, OperatorAction.Reverse, OperatorAction.Release).forEach { action ->
++                                ActionRow(action, state, ::request, primary = action == OperatorAction.Continue)
++                            }
++                            Hint("Continue finishes the stopped route. Reverse drives back to its start. " +
++                                "Release ends it at idle. The stop button is under every screen.")
+                         }
+-                        Hint("Continue finishes the stopped route. Reverse drives back to its start. " +
+-                            "Release ends it at idle. The stop button is under every screen.")
+-                    }
+-                    ControlGroup("Obstacle sensing") {
+-                        ToggleRow(
+-                            title = "Obstacle sonar",
+-                            value = status?.ultrasonicEnabled.takeIf { fresh },
+-                            onText = "Enabled (controller confirmed)",
+-                            offText = "Disabled; servo at its default view (confirmed)",
+-                            turnOn = OperatorAction.SonarOn, turnOff = OperatorAction.SonarOff,
+-                            state = state, onRequest = ::request
+-                        )
+-                        ToggleRow(
+-                            title = "Front LiDAR checks",
+-                            value = status?.frontReadOnly?.not().takeIf { fresh },
+-                            onText = "Stopping for what is ahead",
+-                            offText = "Read-only: shown, not stopping",
+-                            turnOn = OperatorAction.FrontReadOnlyOff, turnOff = OperatorAction.FrontReadOnlyOn,
+-                            state = state, onRequest = ::request
+-                        )
+-                        ToggleRow(
+-                            title = "Rear LiDAR checks",
+-                            value = status?.backReadOnly?.not().takeIf { fresh },
+-                            onText = "Enabled",
+-                            offText = "Read-only: shown, not stopping",
+-                            turnOn = OperatorAction.BackReadOnlyOff, turnOff = OperatorAction.BackReadOnlyOn,
+-                            state = state, onRequest = ::request
+-                        )
+-                    }
+-                    ControlGroup("System") {
+-                        ActionRow(OperatorAction.Reboot, state, ::request, primary = false)
+-                        Hint("Manual disposal is on Home; the return to base is on Activity.")
+-                        if (fresh && status != null && status.software.isNotBlank()) {
+-                            Hint("Robot software ${status.software}, running ${status.launcherMode}.")
++
++                        ControlGroup("Obstacle sensing") {
++                            ToggleRow(
++                                title = "Obstacle sonar",
++                                value = status?.ultrasonicEnabled.takeIf { fresh },
++                                onText = "Enabled (controller confirmed)",
++                                offText = "Disabled; servo at its default view (confirmed)",
++                                turnOn = OperatorAction.SonarOn, turnOff = OperatorAction.SonarOff,
++                                state = state, onRequest = ::request
++                            )
++                            ToggleRow(
++                                title = "Front LiDAR checks",
++                                value = status?.frontReadOnly?.not().takeIf { fresh },
++                                onText = "Stopping for what is ahead",
++                                offText = "Read-only: shown, not stopping",
++                                turnOn = OperatorAction.FrontReadOnlyOff, turnOff = OperatorAction.FrontReadOnlyOn,
++                                state = state, onRequest = ::request
++                            )
++                            ToggleRow(
++                                title = "Side LiDAR checks",
++                                value = status?.sideReadOnly?.not().takeIf { fresh },
++                                onText = "Stopping for obstacles beside body",
++                                offText = "Read-only: shown, not stopping",
++                                turnOn = OperatorAction.SideReadOnlyOff, turnOff = OperatorAction.SideReadOnlyOn,
++                                state = state, onRequest = ::request
++                            )
++                            ToggleRow(
++                                title = "Rear LiDAR checks",
++                                value = status?.backReadOnly?.not().takeIf { fresh },
++                                onText = "Enabled",
++                                offText = "Read-only: shown, not stopping",
++                                turnOn = OperatorAction.BackReadOnlyOff, turnOff = OperatorAction.BackReadOnlyOn,
++                                state = state, onRequest = ::request
++                            )
+                         }
+-                        if (state.uid.isNotBlank()) {
+-                            Hint("This phone's ID, for GARBY's operator list: ${state.uid}")
++
++                        ControlGroup("System") {
++                            ActionRow(OperatorAction.Reboot, state, ::request, primary = false)
++                            Hint("Manual disposal is on Home; the return to base is on Activity.")
++                            if (fresh && status != null && status.software.isNotBlank()) {
++                                Hint("Robot software ${status.software}, running ${status.launcherMode}.")
++                            }
++                            if (state.uid.isNotBlank()) {
++                                Hint("This phone's ID, for GARBY's operator list: ${state.uid}")
++                            }
++                        }
++                    } else {
++                        // Developer Controls Section
++                        DeveloperStatusPanel(status, fresh)
++
++                        ControlGroup("1. Active sensor gates during test") {
++                            Row(
++                                modifier = Modifier.fillMaxWidth(),
++                                horizontalArrangement = Arrangement.spacedBy(8.dp)
++                            ) {
++                                SensorGateChip("LiDAR", gateLidar) { gateLidar = !gateLidar }
++                                SensorGateChip("Gyro (MPU)", gateMpu) { gateMpu = !gateMpu }
++                                SensorGateChip("Sonar", gateSonar) { gateSonar = !gateSonar }
++                            }
++                            Hint("Untick to test without that sensor. Gates restore automatically after each test.")
++                        }
++
++                        ControlGroup("2. Motion bench tests") {
++                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestF, state, ::request, primary = false) }
++                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestB, state, ::request, primary = false) }
++                            }
++                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestL, state, ::request, primary = false) }
++                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestR, state, ::request, primary = false) }
++                            }
++                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestL90, state, ::request, primary = false) }
++                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestR90, state, ::request, primary = false) }
++                            }
++                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestM1, state, ::request, primary = false) }
++                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestM2, state, ::request, primary = false) }
++                            }
++                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevTestSensors, state, ::request, primary = false) }
++                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevCancel, state, ::request, primary = false) }
++                            }
++                        }
++
++                        ControlGroup("3. Remote directional drive") {
++                            Row(
++                                modifier = Modifier.fillMaxWidth(),
++                                horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                verticalAlignment = Alignment.CenterVertically
++                            ) {
++                                Text("Speed:", style = MaterialTheme.typography.bodyMedium, color = GarbyColors.TextMuted)
++                                SensorGateChip("Normal (30 cm/s)", !fastSpeed) { fastSpeed = false }
++                                SensorGateChip("Fast (60 cm/s)", fastSpeed) { fastSpeed = true }
++                            }
++                            Spacer(Modifier.height(8.dp))
++                            Column(
++                                modifier = Modifier.fillMaxWidth(),
++                                horizontalAlignment = Alignment.CenterHorizontally,
++                                verticalArrangement = Arrangement.spacedBy(8.dp)
++                            ) {
++                                GlassButton(
++                                    text = "▲ Forward",
++                                    onClick = { request(OperatorAction.DevHoldW) },
++                                    style = GlassButtonStyle.Secondary,
++                                    modifier = Modifier.width(160.dp)
++                                )
++                                Row(
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                    verticalAlignment = Alignment.CenterVertically
++                                ) {
++                                    GlassButton(
++                                        text = "◀ Spin Left",
++                                        onClick = { request(OperatorAction.DevHoldA) },
++                                        style = GlassButtonStyle.Secondary,
++                                        modifier = Modifier.width(110.dp)
++                                    )
++                                    GlassButton(
++                                        text = "⏹ Stop",
++                                        onClick = { request(OperatorAction.DevHoldStop) },
++                                        style = GlassButtonStyle.Primary,
++                                        modifier = Modifier.width(90.dp)
++                                    )
++                                    GlassButton(
++                                        text = "Spin Right ▶",
++                                        onClick = { request(OperatorAction.DevHoldD) },
++                                        style = GlassButtonStyle.Secondary,
++                                        modifier = Modifier.width(110.dp)
++                                    )
++                                }
++                                GlassButton(
++                                    text = "▼ Backward",
++                                    onClick = { request(OperatorAction.DevHoldS) },
++                                    style = GlassButtonStyle.Secondary,
++                                    modifier = Modifier.width(160.dp)
++                                )
++                            }
++                            Hint("Tap direction to drive. Tap Stop or EMERGENCY STOP to halt.")
++                        }
++
++                        ControlGroup("4. RunStart step sequence") {
++                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevRunContinue, state, ::request, primary = true) }
++                                Box(Modifier.weight(1f)) { ActionRow(OperatorAction.DevRunUndo, state, ::request, primary = false) }
++                            }
++                            ActionRow(OperatorAction.DevRunClear, state, ::request, primary = false)
++                            Hint("Continues, reverses or clears the step sequence stored in the robot controller.")
+                         }
+                     }
+                 }
+@@ -209,8 +398,7 @@ fun ControlsScreen(viewModel: OperatorViewModel) {
+                         text = text.confirm,
+                         onClick = {
+                             confirming = null
+-                            // The view model rechecks the gate with the state of this moment.
+-                            viewModel.send(action)
++                            viewModel.send(action, sensors = sensorMask, fast = fastSpeed)
+                         },
+                         modifier = Modifier.weight(1f)
+                     )
+@@ -220,6 +408,52 @@ fun ControlsScreen(viewModel: OperatorViewModel) {
+     }
+ }
+ 
++@Composable
++private fun SensorGateChip(label: String, checked: Boolean, onToggle: () -> Unit) {
++    Box(
++        modifier = Modifier
++            .clip(GlassShapes.Pill)
++            .background(if (checked) GarbyColors.Ember.copy(alpha = 0.35f) else GarbyColors.GlassStrokeFaint)
++            .clickable(onClick = onToggle)
++            .padding(horizontal = 14.dp, vertical = 8.dp)
++    ) {
++        Text(
++            text = (if (checked) "✓ " else "✗ ") + label,
++            style = MaterialTheme.typography.labelMedium,
++            fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Normal,
++            color = if (checked) GarbyColors.TextPrimary else GarbyColors.TextMuted
++        )
++    }
++}
++
++@Composable
++private fun DeveloperStatusPanel(status: OperatorStatus?, fresh: Boolean) {
++    GlassPanel {
++        Text("Developer bench status", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
++        Spacer(Modifier.height(8.dp))
++        if (status == null || !fresh) {
++            Text(
++                "Waiting for robot connection. Developer tests require a live link to GARBY.",
++                style = MaterialTheme.typography.bodyMedium, color = GarbyColors.Warning
++            )
++        } else {
++            val statusColor = if (status.developerPending) GarbyColors.Warning else GarbyColors.Ok
++            val statusText = when {
++                status.developerPending -> "Test in progress…"
++                status.developerResult.isNotBlank() -> status.developerResult
++                status.emergencyStopped == true -> "Emergency stop latched (release before testing)"
++                else -> "Ready for bench tests"
++            }
++            InfoLine("Status", statusText, statusColor)
++            val stateText = status.robotState.replace('_', ' ').lowercase()
++                .replaceFirstChar { it.uppercase() }.ifBlank { "Unknown" }
++            InfoLine("Robot state", stateText, GarbyColors.TextPrimary)
++            Spacer(Modifier.height(4.dp))
++            Hint("Developer tests bypass standard route rules for bench checks. The EMERGENCY STOP button halts any test immediately.")
++        }
++    }
++}
++
+ @Composable
+ private fun StatePanel(status: OperatorStatus?, fresh: Boolean, nowMs: Long) {
+     GlassPanel {
+diff --git a/app/src/main/java/com/thesis/garby/MapScreen.kt b/app/src/main/java/com/thesis/garby/MapScreen.kt
+index 382e06d..7c25718 100644
+--- a/app/src/main/java/com/thesis/garby/MapScreen.kt
++++ b/app/src/main/java/com/thesis/garby/MapScreen.kt
+@@ -34,6 +34,7 @@ import androidx.compose.ui.geometry.CornerRadius
+ import androidx.compose.ui.geometry.Offset
+ import androidx.compose.ui.geometry.Size
+ import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.Path
+ import androidx.compose.ui.graphics.PathEffect
+ import androidx.compose.ui.graphics.StrokeCap
+ import androidx.compose.ui.graphics.drawscope.DrawScope
+@@ -236,19 +237,18 @@ private fun RadarView(frame: MapFrame, rangeM: Int, stale: Boolean) {
+             val (forward, left) = mapPointCm(degree, cm)
+             drawCircle(RadarPoint.copy(alpha = fade), dot, toCanvas(forward, left, pxPerCm))
+         }
+-        // GARBY: a 60 cm body, front up.
+-        val body = 30f * pxPerCm
+-        drawRoundRect(
+-            GarbyColors.TextPrimary.copy(alpha = fade),
+-            topLeft = Offset(center.x - body, center.y - body),
+-            size = Size(2f * body, 2f * body),
+-            cornerRadius = CornerRadius(body / 3f),
+-            style = Stroke(2.dp.toPx())
+-        )
+-        drawLine(
+-            GarbyColors.TextPrimary.copy(alpha = fade), center, Offset(center.x, center.y - body * 1.6f),
+-            strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round
+-        )
++        // GARBY: a small arrow pointing forward (up).
++        val arrowLength = 11.dp.toPx()
++        val arrowHalfWidth = 6.5.dp.toPx()
++        val arrowIndent = 2.5.dp.toPx()
++        val arrowPath = Path().apply {
++            moveTo(center.x, center.y - arrowLength)
++            lineTo(center.x + arrowHalfWidth, center.y + arrowLength * 0.6f)
++            lineTo(center.x, center.y + arrowLength * 0.6f - arrowIndent)
++            lineTo(center.x - arrowHalfWidth, center.y + arrowLength * 0.6f)
++            close()
++        }
++        drawPath(arrowPath, GarbyColors.TextPrimary.copy(alpha = fade))
+         if (!stale) {
+             frame.markers.forEach { marker ->
+                 if (marker.forwardCm * marker.forwardCm + marker.leftCm * marker.leftCm > limit * limit) return@forEach
+diff --git a/app/src/main/java/com/thesis/garby/OperatorViewModel.kt b/app/src/main/java/com/thesis/garby/OperatorViewModel.kt
+index 59bd15c..ccdfc90 100644
+--- a/app/src/main/java/com/thesis/garby/OperatorViewModel.kt
++++ b/app/src/main/java/com/thesis/garby/OperatorViewModel.kt
+@@ -119,7 +119,7 @@ class OperatorViewModel : ViewModel() {
+     }
+ 
+     /** Send [action] after rechecking the gate with the newest state. */
+-    fun send(action: OperatorAction) {
++    fun send(action: OperatorAction, sensors: Int? = null, fast: Boolean? = null) {
+         if (sendJob?.isActive == true && action != OperatorAction.Estop) return
+         val state = _uiState.value
+         val blocked = operatorBlockReason(
+@@ -134,7 +134,7 @@ class OperatorViewModel : ViewModel() {
+         _uiState.update { it.copy(sending = action, notice = null) }
+         sendJob = viewModelScope.launch(GarbyDispatchers.background) {
+             try {
+-                val notice = when (val result = OperatorDb.send(deviceId, uid, action)) {
++                val notice = when (val result = OperatorDb.send(deviceId, uid, action, sensors, fast)) {
+                     is OperatorSubmission.Sent -> null
+                     is OperatorSubmission.NotSent -> result.message
+                     is OperatorSubmission.Unconfirmed -> result.message
+diff --git a/app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt b/app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt
+index 1825be8..ff77cf6 100644
+--- a/app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt
++++ b/app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt
+@@ -111,12 +111,16 @@ object OperatorDb {
+             robotState = snapshot.string("robotState").orEmpty(),
+             frontReadOnly = snapshot.bool("frontReadOnly") ?: false,
+             backReadOnly = snapshot.bool("backReadOnly") ?: false,
++            sideReadOnly = snapshot.bool("sideReadOnly") ?: false,
+             readOnlyAllowed = snapshot.bool("readOnlyAllowed") ?: false,
+             motionHold = snapshot.string("motionHold").orEmpty(),
+             zones = snapshot.string("zones").orEmpty(),
+             routeLeg = snapshot.string("routeLeg").orEmpty(),
+             people = (snapshot.long("people") ?: 0L).toInt(),
+             objects = (snapshot.long("objects") ?: 0L).toInt(),
++            developerEnabled = snapshot.bool("developerEnabled") ?: false,
++            developerPending = snapshot.bool("developerPending") ?: false,
++            developerResult = snapshot.string("developerResult").orEmpty(),
+             launcherMode = launcher.string("mode").orEmpty(),
+             launcherStartedAtMs = launcher.long("startedAt") ?: 0L,
+             software = launcher.string("software").orEmpty()
+@@ -206,7 +210,13 @@ object OperatorDb {
+      * Write one operator request. The transaction refuses to overwrite a request the Pi is still
+      * working on, except for an emergency stop, which always goes through.
+      */
+-    suspend fun send(deviceId: String, uid: String, action: OperatorAction): OperatorSubmission {
++    suspend fun send(
++        deviceId: String,
++        uid: String,
++        action: OperatorAction,
++        sensors: Int? = null,
++        fast: Boolean? = null
++    ): OperatorSubmission {
+         requireValid(deviceId)
+         require(uid.isNotBlank())
+         if (!NetworkConnectivityManager.isNetworkConnected()) {
+@@ -229,7 +239,7 @@ object OperatorDb {
+                                 nowMs = GarbyRealtimeDb.serverNowMs()
+                             )
+                             if (!continuation.isActive || !replaceable) return Transaction.abort()
+-                            data.value = mapOf(
++                            val payload = mutableMapOf<String, Any>(
+                                 "version" to 1,
+                                 "requestId" to requestId,
+                                 "requestedAt" to ServerValue.TIMESTAMP,
+@@ -237,6 +247,9 @@ object OperatorDb {
+                                 "action" to action.wire,
+                                 "status" to "pending"
+                             )
++                            if (sensors != null) payload["sensors"] = sensors
++                            if (fast != null) payload["fast"] = fast
++                            data.value = payload
+                             return Transaction.success(data)
+                         }
+ 
+diff --git a/app/src/main/java/com/thesis/garby/realtime/OperatorModels.kt b/app/src/main/java/com/thesis/garby/realtime/OperatorModels.kt
+index d37d7d3..71c8bfa 100644
+--- a/app/src/main/java/com/thesis/garby/realtime/OperatorModels.kt
++++ b/app/src/main/java/com/thesis/garby/realtime/OperatorModels.kt
+@@ -25,7 +25,30 @@ enum class OperatorAction(val wire: String, val label: String) {
+     FrontReadOnlyOff("FRONT_READONLY_OFF", "Enable front LiDAR checks"),
+     BackReadOnlyOn("BACK_READONLY_ON", "Rear LiDAR read-only"),
+     BackReadOnlyOff("BACK_READONLY_OFF", "Enable rear LiDAR checks"),
+-    Reboot("REBOOT", "Restart Pi and controllers");
++    SideReadOnlyOn("SIDE_READONLY_ON", "Side LiDAR read-only"),
++    SideReadOnlyOff("SIDE_READONLY_OFF", "Enable side LiDAR checks"),
++    Reboot("REBOOT", "Restart Pi and controllers"),
++    // Developer actions:
++    DevTestF("DEV_TEST_F", "Forward ~5 cm"),
++    DevTestB("DEV_TEST_B", "Backward ~5 cm"),
++    DevTestL("DEV_TEST_L", "Turn left 10°"),
++    DevTestR("DEV_TEST_R", "Turn right 10°"),
++    DevTestL90("DEV_TEST_L90", "Turn left 90°"),
++    DevTestR90("DEV_TEST_R90", "Turn right 90°"),
++    DevTestM1("DEV_TEST_M1", "Motor 1 only"),
++    DevTestM2("DEV_TEST_M2", "Motor 2 only"),
++    DevTestSensors("DEV_TEST_I", "Check sensors"),
++    DevCancel("DEV_CANCEL", "Cancel test"),
++    DevRunContinue("DEV_RUN_CONTINUE", "Continue RunStart"),
++    DevRunUndo("DEV_RUN_UNDO", "Undo RunStart"),
++    DevRunClear("DEV_RUN_CLEAR", "Clear RunStart"),
++    DevHoldW("DEV_HOLD_W", "Drive forward"),
++    DevHoldS("DEV_HOLD_S", "Drive backward"),
++    DevHoldA("DEV_HOLD_A", "Spin left"),
++    DevHoldD("DEV_HOLD_D", "Spin right"),
++    DevHoldStop("DEV_HOLD_STOP", "Stop drive");
++
++    val isDeveloperAction: Boolean get() = wire.startsWith("DEV_")
+ 
+     companion object {
+         fun fromWire(value: String?): OperatorAction? = entries.firstOrNull { it.wire == value }
+@@ -78,12 +101,16 @@ data class OperatorStatus(
+     val robotState: String = "",
+     val frontReadOnly: Boolean = false,
+     val backReadOnly: Boolean = false,
++    val sideReadOnly: Boolean = false,
+     val readOnlyAllowed: Boolean = false,
+     val motionHold: String = "",
+     val zones: String = "",
+     val routeLeg: String = "",
+     val people: Int = 0,
+     val objects: Int = 0,
++    val developerEnabled: Boolean = false,
++    val developerPending: Boolean = false,
++    val developerResult: String = "",
+     val launcherMode: String = "",
+     val launcherStartedAtMs: Long = 0L,
+     val software: String = ""
+@@ -147,9 +174,17 @@ fun operatorBlockReason(
+         OperatorAction.SonarOn, OperatorAction.SonarOff ->
+             if (status.canConfigure) null else "Only while GARBY is idle."
+         OperatorAction.FrontReadOnlyOn, OperatorAction.FrontReadOnlyOff,
+-        OperatorAction.BackReadOnlyOn, OperatorAction.BackReadOnlyOff ->
++        OperatorAction.BackReadOnlyOn, OperatorAction.BackReadOnlyOff,
++        OperatorAction.SideReadOnlyOn, OperatorAction.SideReadOnlyOff ->
+             if (status.readOnlyAllowed) null else "Read-only is not permitted on this robot."
+         OperatorAction.Estop -> null
++        else -> {
++            if (action.isDeveloperAction) {
++                if (status.emergencyStopped == true) "Release emergency stop before testing."
++                else if (status.pending || status.developerPending) "A test or action is currently in progress."
++                else null
++            } else null
++        }
+     }
+ }
+ 
+diff --git a/app/src/test/java/com/thesis/garby/realtime/OperatorModelsTest.kt b/app/src/test/java/com/thesis/garby/realtime/OperatorModelsTest.kt
+index 23e62fd..fb177ed 100644
+--- a/app/src/test/java/com/thesis/garby/realtime/OperatorModelsTest.kt
++++ b/app/src/test/java/com/thesis/garby/realtime/OperatorModelsTest.kt
+@@ -43,7 +43,7 @@ class OperatorModelsTest {
+ 
+     @Test
+     fun everythingElseNeedsAFreshConfirmedState() {
+-        val others = OperatorAction.entries.filter { it != OperatorAction.Estop }
++        val others = OperatorAction.entries.filter { it != OperatorAction.Estop && !it.isDeveloperAction }
+         val all = ready(stopped = true, canRelease = true, canContinue = true, canReverse = true, canReset = true)
+         for (action in others) {
+             assertNull(action.name, block(action, all))
+@@ -57,6 +57,17 @@ class OperatorModelsTest {
+         }
+     }
+ 
++    @Test
++    fun developerActionsNeedConnectedAndNotEmergencyStopped() {
++        val devActions = OperatorAction.entries.filter { it.isDeveloperAction }
++        val devReady = ready(stopped = false)
++        for (action in devActions) {
++            assertNull(action.name, block(action, devReady))
++            assertEquals("Release emergency stop before testing.", block(action, devReady.copy(emergencyStopped = true)))
++            assertEquals("A test or action is currently in progress.", block(action, devReady.copy(developerPending = true)))
++        }
++    }
++
+     @Test
+     fun releaseContinueAndReverseFollowTheControllersOwnPermissions() {
+         val stopped = ready(stopped = true, canRelease = true)
+@@ -79,6 +90,7 @@ class OperatorModelsTest {
+         assertNotNull(block(OperatorAction.SonarOff, ready(canConfigure = false)))
+         assertNull(block(OperatorAction.FrontReadOnlyOn, ready(canConfigure = false)))
+         assertNotNull(block(OperatorAction.BackReadOnlyOn, ready(readOnlyAllowed = false)))
++        assertNotNull(block(OperatorAction.SideReadOnlyOn, ready(readOnlyAllowed = false)))
+     }
+ 
+     @Test
+@@ -126,7 +138,12 @@ class OperatorModelsTest {
+     fun theWireNamesMatchThePi() {
+         assertEquals(
+             listOf("ESTOP", "RELEASE", "CONTINUE", "REVERSE", "SONAR_ON", "SONAR_OFF", "FRONT_READONLY_ON",
+-                "FRONT_READONLY_OFF", "BACK_READONLY_ON", "BACK_READONLY_OFF", "REBOOT"),
++                "FRONT_READONLY_OFF", "BACK_READONLY_ON", "BACK_READONLY_OFF", "SIDE_READONLY_ON",
++                "SIDE_READONLY_OFF", "REBOOT",
++                "DEV_TEST_F", "DEV_TEST_B", "DEV_TEST_L", "DEV_TEST_R", "DEV_TEST_L90", "DEV_TEST_R90",
++                "DEV_TEST_M1", "DEV_TEST_M2", "DEV_TEST_I", "DEV_CANCEL",
++                "DEV_RUN_CONTINUE", "DEV_RUN_UNDO", "DEV_RUN_CLEAR",
++                "DEV_HOLD_W", "DEV_HOLD_S", "DEV_HOLD_A", "DEV_HOLD_D", "DEV_HOLD_STOP"),
+             OperatorAction.entries.map { it.wire }
+         )
+         assertEquals(OperatorAction.Reverse, OperatorAction.fromWire("REVERSE"))

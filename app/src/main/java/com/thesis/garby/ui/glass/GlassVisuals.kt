@@ -7,7 +7,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,7 +41,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -55,8 +53,6 @@ import com.thesis.garby.R
 import com.thesis.garby.performance.LocalPerformanceProfile
 import com.thesis.garby.ui.rememberResourceBitmap
 import com.thesis.garby.ui.theme.GarbyColors
-import kotlin.math.cos
-import kotlin.math.sin
 
 /** The round GARBY logo inside a glass ring. The source image is off-centre, hence the bias. */
 @Composable
@@ -87,80 +83,6 @@ fun LogoBadge(size: Dp, modifier: Modifier = Modifier, ring: Dp = 3.dp) {
                     .clip(CircleShape)
             )
         }
-    }
-}
-
-/**
- * A 270° ring. [progress] is clamped for drawing only, so callers can still print a value beyond
- * the scale. [markers] are fractions of the scale drawn as ticks (thresholds).
- */
-@Composable
-fun RingGauge(
-    progress: Float,
-    color: Color,
-    modifier: Modifier = Modifier,
-    strokeWidth: Dp = 10.dp,
-    markers: List<Float> = emptyList(),
-    content: @Composable BoxScope.() -> Unit = {}
-) {
-    val target = if (progress.isFinite()) progress.coerceIn(0f, 1f) else 0f
-    val reducedEffects = LocalPerformanceProfile.current.reducedEffects
-    val animated = if (reducedEffects) rememberUpdatedState(target) else
-        animateFloatAsState(target, animationSpec = tween(250), label = "ringGauge")
-    Box(contentAlignment = Alignment.Center, modifier = modifier) {
-        Canvas(Modifier.matchParentSize()) {
-            val sweepFraction = animated.value
-            val stroke = strokeWidth.toPx()
-            val diameter = size.minDimension - stroke * 2f
-            val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
-            val arcSize = Size(diameter, diameter)
-            val start = 135f
-            val sweep = 270f
-            drawArc(
-                color = Color.White.copy(alpha = 0.12f),
-                startAngle = start,
-                sweepAngle = sweep,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(stroke, cap = StrokeCap.Round)
-            )
-            if (sweepFraction > 0f) {
-                // Soft glow under the value arc.
-                if (!reducedEffects) drawArc(
-                    color = color.copy(alpha = 0.22f),
-                    startAngle = start,
-                    sweepAngle = sweep * sweepFraction,
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = Stroke(stroke * 2f, cap = StrokeCap.Round)
-                )
-                drawArc(
-                    color = color,
-                    startAngle = start,
-                    sweepAngle = sweep * sweepFraction,
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = Stroke(stroke, cap = StrokeCap.Round)
-                )
-            }
-            val radius = diameter / 2f
-            markers.filter { it in 0f..1f }.forEach { fraction ->
-                val angle = Math.toRadians((start + sweep * fraction).toDouble())
-                val inner = radius - stroke * 0.9f
-                val outer = radius + stroke * 0.9f
-                drawLine(
-                    color = Color.White.copy(alpha = 0.85f),
-                    start = Offset(center.x + cos(angle).toFloat() * inner, center.y + sin(angle).toFloat() * inner),
-                    end = Offset(center.x + cos(angle).toFloat() * outer, center.y + sin(angle).toFloat() * outer),
-                    strokeWidth = 2.dp.toPx(),
-                    cap = StrokeCap.Round
-                )
-            }
-        }
-        content()
     }
 }
 

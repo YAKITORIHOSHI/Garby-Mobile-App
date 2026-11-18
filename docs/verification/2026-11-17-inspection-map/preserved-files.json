@@ -1,0 +1,16 @@
+{
+  "local.properties": "9fe5602b099412976a02a1f66bb733f022df4777e903c9ca3e61c40ce5ddaf11",
+  "app/build.gradle.kts": "8944027fdd4612e88d026eee6f7db87f46681467f795cde7ce0be71fe86b2aee",
+  "settings.gradle.kts": "d772c595bf5f0d887a66bf5444778250200cdb92c4453eb6aa1e97066fa247a8",
+  "gradle.properties": "e03e85114266d406aa5ee13f9e439481d74a722fe5c3b7464f3690616e9fa8c8",
+  "gradle/libs.versions.toml": "888f550418a4436d4128ead51940b94f608c5aa6fc26bfc3b629c799d511f8a9",
+  ".idea/inspectionProfiles/Project_Default.xml": "be5615de61e7af21bc336ee54ae933b94d66e2e6e032c61d7d40d666af6bde4d",
+  "app/src/main/java/com/thesis/garby/ControlsScreen.kt": "0f0e0397dbdc97456ec9cb425dbc28ef6379897d8dc892d773e88421811c5bb3",
+  "app/src/main/java/com/thesis/garby/ui/BottomBar.kt": "fb7d3168365da6ab069b5d2f5f9768ff7fd330969c5ad9ea796c97429526ef36",
+  "app/src/main/java/com/thesis/garby/ui/theme/Color.kt": "5d3ea70f173ede38e8243e9facb2a1058bc170a9fc4fd0c1d769fea1da092842",
+  "app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt": "3c729abf8d14141ae111d1dde164d1d6d65d9552240c25c842acbcec33220483",
+  "app/src/main/java/com/thesis/garby/realtime/OperatorModels.kt": "229e93262e859af94ee908bbf57d1f08115c8cbdba33791ad1fa13604d6a07dc",
+  "app/src/main/java/com/thesis/garby/ReturnViewModel.kt": "0b0d347991d06811b400eccb00e57590f003d7e2527f639f0ecbdf68ce95e440",
+  "app/src/main/java/com/thesis/garby/realtime/DeviceViewModel.kt": "8defd5405be046e4bcbf3e1737b228177ec9bf24c1869551d3f27cc909a2ce06",
+  "app/src/main/java/com/thesis/garby/realtime/GarbyRealtimeDb.kt": "f655f4673885084af40edf44919c9ea17354093263266d1f8e88e0c6a01966d7"
+}

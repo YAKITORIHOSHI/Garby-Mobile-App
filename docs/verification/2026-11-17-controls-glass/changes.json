@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-17",
+  "scope": "Controls and Developer presentation only",
+  "files": [
+    {
+      "path": "app/src/main/java/com/thesis/garby/ControlsScreen.kt",
+      "beforeSha256": "1fed97243c2fd0de3c89952f730c24311931fab8997cb52fc90629c850f0dd8d",
+      "afterSha256": "915de06a23f9f5ba0ac463b2e9fa085ca7c91b057fab6b1d03d554c9292a73cf",
+      "purpose": "Scoped cyan/violet glass redesign, responsive controls, explicit states and design previews."
+    },
+    {
+      "path": "README.md",
+      "beforeSha256": "f5601c85cb6fe347fa512ed430bf4c0f7d1a4da025faf229892cee82dc52671c",
+      "afterSha256": "054bed389d92f79b38fcabe6b1bd2d166b0a0311408bd54c1c2582c96409005d",
+      "purpose": "Updated visible Controls/Developer usage."
+    },
+    {
+      "path": "SYSTEM_ARCHITECTURE.md",
+      "beforeSha256": "5d577d61f66fe67d641dae6f4061c973501bad61c4472c6a806956461a02686d",
+      "afterSha256": "2c03f1e6ea8e269a34b0c49ea9623752ec39a0f609326c3b2a3585dd4f75c116",
+      "purpose": "Presentation, performance and unchanged control contracts."
+    },
+    {
+      "path": "PATCH_NOTES.md",
+      "beforeSha256": "19ca38f971673bf62635b428b80c3d16ad3fea58362eef6eb7cfdb2ddf87d525",
+      "afterSha256": "3d2b93a5c352483181a0135a588ac7b42b98860c9eb34e595f3d143d3bd0dbfe",
+      "purpose": "Dated redesign and verification limits."
+    }
+  ],
+  "evidenceDirectory": "docs/verification/2026-11-17-controls-glass",
+  "unchangedWindowsConfiguration": [
+    "local.properties",
+    "settings.gradle.kts",
+    "gradle.properties"
+  ],
+  "unchangedControlConsumers": [
+    "app/src/main/java/com/thesis/garby/OperatorViewModel.kt",
+    "app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt",
+    "app/src/main/java/com/thesis/garby/realtime/OperatorModels.kt"
+  ]
+}

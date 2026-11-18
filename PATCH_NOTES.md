@@ -1,5 +1,172 @@
 # GARBY Mobile App - Patch Notes
 
+## Every Controls-tab control checked against the Pi — 2026-11-18
+
+- Each control was traced to the Pi function its request reaches and now behaves as the Pi
+  monitor's Controls tab / Developer window does. Full table:
+  [robot repository, `docs/phone-controls-rundown-2026-11-18.md`](https://github.com/YAKITORIHOSHI/Garby).
+- Ordinary requests (Release, Continue, Reverse, sonar, read-only, restart) no longer carry
+  the `sensors`/`fast` fields; only bench tests carry the sensor selection and only nudges
+  Normal/Fast. The example rules refuse unknown fields, which would have refused every one of
+  them as "not on GARBY's operator list".
+- Developer controls follow the Pi's own readiness (`developerEnabled`) and show its reason
+  (`developerBlocked`), the running/last test (`developerMessage`) and the result. Stop test and
+  Stop are available while a test or nudge runs, and may overtake the developer request they
+  stop. Sensor chips lock while a test runs; turns are offered only with the gyro ticked.
+  Bench-test confirmations list the sensors obeyed/ignored and the floor warning for turns.
+- Remote drive is **Tap = short nudge** (owner's choice): each arrow tap drives 0.6 s, timed
+  and stopped by the Pi, about 18 cm Normal / 36 cm Fast; no sensor checks, as on the Pi.
+- RunStart shows the list saved on the robot (steps, done/current marks, place, speed and
+  acceleration). Continue run / Reverse to start follow the Pi's RunStart tab, including after
+  an emergency stop (the Pi releases it first); Discard saved works whenever a list is saved
+  and not moving.
+- RunStart editor (owner's follow-up): numbered rows with what each step does and a steps
+  field, a bin per row, Add step (up to 20), Copy saved list, Max speed and Acceleration fields
+  (2351 and 4800 by default) and Start run. The rows are checked with the Pi window's rules
+  and words; Start run stays locked with that reason until they pass, and the confirmation
+  lists the steps. The rows lock while a list moves or stands part-way, as on the Pi.
+- Buttons side by side are now one height whatever their labels wrap to, with a shared reason
+  shown once underneath; the nudge pad is five identical cells. RunStart uses the Pi window's
+  short names (Start run, Continue run, Reverse to start, Discard saved). Long confirmations
+  scroll inside the dialog.
+- Developer outcomes say "taken by GARBY's Pi" instead of "confirmed by the controllers".
+  `firebase/manual-disposal.rules.example.json` lists all 32 actions and the optional
+  `sensors`, `fast`, `program`, `speed` and `accel` fields; it was not published.
+- Lint: `MapScreen.kt` read `Locale.getDefault()` in a composable (NonObservableLocale, a lint
+  error from the earlier map change); it now reads `LocalConfiguration`.
+- Needs robot software `PHONEDEV-20261118`; with older Pi software the RunStart group says to
+  update it. JVM unit tests (104), Kotlin compilation, Android lint and the static checker pass
+  on Windows; nothing was run on a phone or the robot. MCU upload: None.
+
+## Home activity, centered map and inspection cleanup — 2026-11-17
+
+- Added app-wide internet session handling using the existing Android validated-network
+  callbacks. A three-second confirmed outage cancels sign-in/local workflow tracking and
+  returns to Connect from any tab while retaining the approved anonymous Firebase identity,
+  as the owner selected. A brief network handoff cancels the pending session closure.
+  Connect is disabled offline; recovery requires a deliberate Connect tap.
+  Late completion of a cancelled authentication task cannot reopen a closed session. No
+  HTTP polling, new worker pool or robot command is introduced.
+  Network callbacks now consume their delivered capabilities and track the current default
+  network; loss of an old network during handoff cannot overwrite the replacement's state.
+- Home adds a Current activity section: Running, Blocked, Turning, Idle, Parked, Emergency
+  stopped or Route fault. It uses the existing operator mirror; no extra database listener
+  or polling loop. Holds override route-leg turns, emergency stop dominates, and absent,
+  stale or disconnected reports show activity unavailable. The card observes a distinct
+  projection so unchanged clock/map updates do not redraw the grid. Idle does not prove location.
+- Centered the map's loading viewport, wrapped waiting text and Range group. Range choices
+  can wrap at larger text sizes and expose the selected radio state to accessibility services.
+- The 84 dp radar progress sweep now rotates on every performance profile while Map is
+  resumed and waiting. It reads animation phase only in drawing and caches brushes/geometry.
+  It pauses when backgrounded/leaving the tab and is removed on live data or ten-second sleep.
+  The user explicitly requested this active loader; decorative motion remains reduced.
+- Removed an unused dashboard import and the unreferenced RingGauge/GlassDock helpers with
+  exclusive imports. Map decimal formatting now supplies the device locale explicitly.
+  No inspection rules were disabled or warnings broadly suppressed. The configured Firebase
+  registration APIs were checked against current official documentation and retained.
+- Inspection results from the Windows IDE are not available in this environment; an actual
+  Problems export/list is still needed to account for every reported warning/error. Existing
+  static checks and source evidence are recorded in `docs/verification/2026-11-17-inspection-map/`.
+  Compilation, JVM tests and Android lint cannot start here without the Gradle/SDK toolchain.
+  MCU upload and Pi deployment: None for these Android changes.
+
+## Map/Controls content behind floating bars — 2026-11-17
+
+- Moved Map and Controls/Developer scaffold padding inside their scrolling content. Their
+  viewport now extends behind the floating top bar and bottom tabs/emergency-stop container,
+  matching Home and Activity. Previously outer padding stopped content at the bars and
+  exposed a solid-looking background strip. End spacing still lets the last item scroll clear
+  of the dock. Red/rose colors, glass surfaces, command gates and polling are unchanged.
+- Source/static checks recorded in `docs/verification/2026-11-17-floating-scroll/`. Android
+  compilation/layout cannot run on this host without Gradle/SDK access; rebuild the existing
+  benchmark variant on Windows for the visual check. MCU upload/Pi deployment: None.
+
+## Connect-screen rendering and debug-build diagnosis — 2026-11-17
+
+- The owner confirms lag before connecting and use of Android Studio Run/Debug. Live-data
+  polling does not explain lag on that screen; release-equivalent measurement is required.
+  The existing `benchmark` variant already provides R8 optimization without debug
+  instrumentation. The README now points Windows users to it and to a scoped frame capture.
+- Bundled Montserrat fonts load asynchronously instead of blocking first text composition.
+  The same fonts, red/rose palette and glass visuals remain; fallback text can reflow once.
+- The conservative profile bypasses authentication/loading `AnimatedContent` entirely and
+  avoids the tab icon's idle animation state/graphics layer. The Connect screen uses a lazy
+  list instead of constraint-time subcomposition and an eager scrolling column. Operator and
+  return ViewModels are created after authentication, retaining their activity scope across tabs.
+- Source changes need a fresh build on Windows. No new phone frame-rate improvement is claimed;
+  this host has no Android SDK/ADB or cached Gradle distribution. MCU upload and Pi deployment:
+  None for this follow-up. Earlier arrival-related Executor/Pi requirements remain separate.
+
+## App-wide monitoring, floating dock and original palette — 2026-11-17
+
+- Navigation no longer collects complete operator state on every clock tick/map frame. The
+  small dock observes a distinct stop-button projection; genuine stop/link/status changes
+  still reach it immediately.
+- Operator, return and dashboard monitoring share one foreground clock. Dashboard freshness
+  keeps its five-second cadence; operator/return age checks keep their one-second cadence.
+  Authentication and internet status use callbacks instead of per-second main-thread polls.
+  Return sharing stops immediately when unobserved and clears its live-state replay.
+- Tabs/emergency stop overlay the full-size page inside their glass container, without a solid
+  external strip. Measured dock height pads page content so the last action stays reachable.
+  The conservative profile skips dock color/scale transitions as well as other reduced effects.
+- Restored the original GARBY red/rose Controls/Developer palette, retaining glass rims,
+  stronger contrast and explicit enabled/disabled labels. No manufacturer/model branches.
+- Virtual-clock/sharing and dock-projection regressions were added. Static, source-scope and
+  contrast checks pass; Android compilation/tests/lint cannot start on this host because the
+  Gradle distribution is uncached and downloads are denied. No new phone frame-rate result
+  or APK is claimed. Windows project/SDK/build paths are unchanged. MCU upload: None for this
+  app-only change; the earlier Executor/Pi arrival deployment requirement remains separate.
+
+## Controls and Developer glass redesign — 2026-11-17
+
+- Controls uses cyan and Developer uses violet over a navy glass backdrop, with separate
+  section tiles, reflective rims, deeper surfaces, bright opaque text and clearer headings.
+- Action buttons keep readable labels when disabled, with lock icons and the existing reason.
+  Sensor gates explicitly show ON/OFF, with checkbox/radio semantics; sensor mode cards show
+  CHECKS ON, READ ONLY, OFF or UNKNOWN. Speed chips wrap on narrow screens.
+- The directional pad uses available width instead of fixed button widths. Stop/cancel actions
+  remain red, separated from the cyan/violet selection colors. Press feedback is brief; the
+  conservative profile retains its no-animation path. No live blur, shaders or new bitmaps.
+- Existing action bindings, operator gates, confirmations, sensor mask and send arguments are
+  retained. All styling is scoped to ControlsScreen.kt; other screens keep their design.
+- Includes normal, Developer and enlarged-text Android Studio previews plus a labelled design
+  reference. Static/scope/contrast checks passed; full Android compile/lint could not start
+  because this host cannot download uncached Gradle. Device appearance remains unverified.
+  Windows directory/SDK/build paths are unchanged. MCU upload: None for this UI-only task.
+
+## Operator ViewModel compilation correction — 2026-11-17
+
+- Both lifecycle observers use Unit block bodies, preventing a last `launch` from becoming
+  the function's Job return value. Flow collection imports and callback types are explicit.
+- The map-session helper now lives in the existing `realtime/OperatorDb.kt`; the separate
+  `MapSession.kt` is removed. The same database file supplies `mapTimestamp`, an ordinary
+  three-argument `send`, and the five-argument configured developer `send`.
+- Update `OperatorViewModel.kt` and `OperatorDb.kt` together. The static checker detects old
+  companion files, absent map APIs and duplicate map-session definitions. A JVM API contract
+  test checks the actual observer return signatures and the consumer method references.
+- Static checks and negative source-contract checks passed. Gradle Kotlin compilation, JVM
+  tests and lint could not start on this host because Gradle is not cached and network sockets
+  are denied. Windows folder, SDK and build paths are unchanged. This app-only follow-up
+  requires no MCU upload; the previous Executor arrival change remains a separate requirement.
+
+## Compact map, Activity controls and route arrivals — 2026-11-17
+
+- Map display capped at 320 dp; 2/4/8 m ranges and scan detail retained. Scan geometry is cached.
+  After 10 s without a new usable scan, the full frame listener detaches, decoded scan and
+  drawing data are released, and the loader stops. A scalar timestamp listener and the small
+  publication lease allow automatic wake on fresh data. Leaving Map clears the scan immediately.
+- Removed the floating Home return dock. Send back to base is an inline card in Activity,
+  with the existing confirmation, readiness checks and correlated return progress.
+- Phone emergency stop requires an online phone/cloud, a fresh Pi mirror, BLE connection and
+  fresh MCU support. It can still preempt a pending action once those conditions hold.
+- Displays completed outbound arrival at point B/disposal area and return arrival at point A/
+  station from Pi status. Generic IDLE no longer claims station arrival. Activity retains the
+  last completed arrival independently of current travel/unknown status.
+- Windows local.properties, SDK/build paths, settings and the project folder are unchanged.
+  Source/static checks are recorded in docs/verification/2026-11-17-map-route/. Gradle unit
+  tests, Kotlin compilation and lint could not start: no cached Gradle distribution and this
+  host denies network sockets. No APK was built or published for these changes.
+
 ## Phone control and the LiDAR map — 2026-11-15
 
 - **Bottom navigation:** Home, Map, Controls, Activity, with an emergency stop button above the

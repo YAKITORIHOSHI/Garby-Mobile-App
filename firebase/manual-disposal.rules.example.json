@@ -43,10 +43,25 @@
               ".validate": "newData.isString() && newData.val() === auth.uid"
             },
             "action": {
-              ".validate": "newData.isString() && newData.val().matches(/^(ESTOP|RELEASE|CONTINUE|REVERSE|SONAR_ON|SONAR_OFF|FRONT_READONLY_ON|FRONT_READONLY_OFF|BACK_READONLY_ON|BACK_READONLY_OFF|REBOOT)$/)"
+              ".validate": "newData.isString() && newData.val().matches(/^(ESTOP|RELEASE|CONTINUE|REVERSE|SONAR_ON|SONAR_OFF|FRONT_READONLY_ON|FRONT_READONLY_OFF|BACK_READONLY_ON|BACK_READONLY_OFF|SIDE_READONLY_ON|SIDE_READONLY_OFF|REBOOT|DEV_TEST_(F|B|L|R|L90|R90|M1|M2|I)|DEV_CANCEL|DEV_RUN_(START|CONTINUE|UNDO|CLEAR)|DEV_HOLD_(W|S|A|D|STOP))$/)"
             },
             "status": {
               ".validate": "newData.val() === 'pending'"
+            },
+            "sensors": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 7 && newData.parent().child('action').val().beginsWith('DEV_TEST_')"
+            },
+            "fast": {
+              ".validate": "newData.isBoolean() && newData.parent().child('action').val().matches(/^DEV_HOLD_[WSAD]$/)"
+            },
+            "program": {
+              ".validate": "newData.isString() && newData.val().length <= 160 && newData.val().matches(/^[FBLRC][1-9][0-9]{0,5}(,[FBLRC][1-9][0-9]{0,5}){0,19}$/) && newData.parent().child('action').val() === 'DEV_RUN_START'"
+            },
+            "speed": {
+              ".validate": "newData.isNumber() && newData.val() >= 2351 && newData.val() <= 8000 && newData.parent().child('action').val() === 'DEV_RUN_START'"
+            },
+            "accel": {
+              ".validate": "newData.isNumber() && newData.val() >= 100 && newData.val() <= 20000 && newData.parent().child('action').val() === 'DEV_RUN_START'"
             },
             "$other": {
               ".validate": false

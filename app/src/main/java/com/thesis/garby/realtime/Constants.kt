@@ -14,7 +14,7 @@ object RtdbConstants {
     /** Frequency for re-evaluating cached values that can become stale without a callback. */
     const val FRESHNESS_TICK_MS: Long = 5_000L
 
-    /** Return-screen clock; the acceptance window is short enough to count down in seconds. */
+    /** Shared monitoring clock; return acceptance still counts down in seconds. */
     const val RETURN_TICK_MS: Long = 1_000L
 
     const val WRITE_TIMEOUT_MS: Long = 15_000L

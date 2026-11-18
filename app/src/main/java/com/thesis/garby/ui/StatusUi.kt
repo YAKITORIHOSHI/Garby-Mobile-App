@@ -14,6 +14,7 @@ import com.thesis.garby.realtime.HealthLevel
 import com.thesis.garby.realtime.ReturnCheck
 import com.thesis.garby.realtime.ReturnStage
 import com.thesis.garby.realtime.RobotState
+import com.thesis.garby.realtime.RobotLocation
 import com.thesis.garby.realtime.Severity
 import com.thesis.garby.ui.glass.RoutePosition
 import com.thesis.garby.ui.theme.GarbyColors
@@ -32,14 +33,25 @@ data class RobotStateUi(
  * Wording follows the robot's actual behaviour (README "What it does" and "Use"). A null state
  * means the Pi does not publish one; its destination flag is then the only evidence.
  */
-fun robotStateUi(state: RobotState?, readyFlag: Boolean?): RobotStateUi = when (state) {
+fun robotStateUi(state: RobotState?, readyFlag: Boolean?, location: RobotLocation? = null): RobotStateUi = when (state) {
     RobotState.Idle -> RobotStateUi(
-        title = "Idle at base",
-        description = "Starts a run on its own when the bin reaches 4 kg or the gas readings stay " +
-            "dangerous, or when Start is pressed on the Pi monitor.",
+        title = when (location) {
+            RobotLocation.PointA -> "At point A · Station"
+            RobotLocation.PointB -> "At point B · Disposal area"
+            else -> "Idle · location unconfirmed"
+        },
+        description = when (location) {
+            RobotLocation.PointA -> "The return route is complete. GARBY is back at its station."
+            RobotLocation.PointB -> "GARBY is stopped at the disposal area."
+            else -> "GARBY is stopped. Idle alone does not confirm arrival at its station."
+        },
         icon = Icons.Rounded.Home,
         color = GarbyColors.Ok,
-        route = RoutePosition.AtBase
+        route = when (location) {
+            RobotLocation.PointA -> RoutePosition.AtBase
+            RobotLocation.PointB -> RoutePosition.AtDestination
+            else -> RoutePosition.Stopped
+        }
     )
     RobotState.Outbound -> RobotStateUi(
         title = "Driving to the collection point",
@@ -51,7 +63,7 @@ fun robotStateUi(state: RobotState?, readyFlag: Boolean?): RobotStateUi = when (
         moving = true
     )
     RobotState.AtDestination -> RobotStateUi(
-        title = "Waiting at the collection point",
+        title = "At point B · Disposal area",
         description = "Parked and stopped. Once the bin has been emptied, send GARBY back to base " +
             "from this app.",
         icon = Icons.Rounded.Flag,

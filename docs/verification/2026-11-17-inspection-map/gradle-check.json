@@ -1,0 +1,18 @@
+{
+  "command": [
+    "bash",
+    "gradlew",
+    ":app:compileDebugKotlin",
+    ":app:testDebugUnitTest",
+    ":app:lintDebug",
+    ":app:compileBenchmarkKotlin",
+    ":app:lintBenchmark",
+    "--no-daemon",
+    "--console=plain"
+  ],
+  "exit_code": 1,
+  "seconds": 0.482,
+  "log": "gradle.log",
+  "GRADLE_USER_HOME": "/tmp/garby-inspection-map-gradle",
+  "status": "blocked before compilation"
+}

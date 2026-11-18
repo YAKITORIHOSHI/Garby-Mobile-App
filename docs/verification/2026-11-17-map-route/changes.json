@@ -1,0 +1,149 @@
+{
+  "date": "2026-11-17",
+  "repository": "Garby-Mobile-App",
+  "existingDirectoryPreserved": true,
+  "baseline": "source-before.json",
+  "preExistingChanges": "pre-existing.diff",
+  "files": [
+    {
+      "path": "FIREBASE_CONFIGURATION.md",
+      "status": "modified",
+      "beforeSha256": "dc481ee90a7461802d9360e358e122a4e793eb761c1545d5c1642b9b5fbe60aa",
+      "afterSha256": "6eb796e0d963813efb5ec55eeade2c6c1db4313ad4bdfb7282a027ccae255372",
+      "purpose": "Document Pi-owned endpoint fields; no new client write permission."
+    },
+    {
+      "path": "PATCH_NOTES.md",
+      "status": "modified",
+      "beforeSha256": "bd0afd3572d741e8a256ed316661d846115fca632d174165d97742b5a9a7611e",
+      "afterSha256": "4bf10f99b7286addc047d42f3ea80efa308c5c3d752031319313ef68469b2c89",
+      "purpose": "Record this source change and its unrun Android build checks."
+    },
+    {
+      "path": "README.md",
+      "status": "modified",
+      "beforeSha256": "795bdee33e96a992d0d304e4c9763cd399fe0ad7bc41d1349bd7809175123b7b",
+      "afterSha256": "f5601c85cb6fe347fa512ed430bf4c0f7d1a4da025faf229892cee82dc52671c",
+      "purpose": "Describe Activity controls, compact/sleeping map and conditional phone stop."
+    },
+    {
+      "path": "SYSTEM_ARCHITECTURE.md",
+      "status": "modified",
+      "beforeSha256": "763e45eeca71d890493c0beb49b327bc6ec6a6c40d86daf7abac8f6166d3c9b2",
+      "afterSha256": "5d577d61f66fe67d641dae6f4061c973501bad61c4472c6a806956461a02686d",
+      "purpose": "Document map lifecycle, availability and endpoint contracts."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/ControlsScreen.kt",
+      "status": "modified",
+      "beforeSha256": "e63d85da5b79550872638799fe2285e24895a87987d05adb241cd59243856cb2",
+      "afterSha256": "1fed97243c2fd0de3c89952f730c24311931fab8997cb52fc90629c850f0dd8d",
+      "purpose": "Use the shared cloud-aware control gate; retain pre-existing developer changes."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/MainActivity.kt",
+      "status": "modified",
+      "beforeSha256": "34811ec4175e960baabf6705063ea2c8edc086d0b2841df29e29a0069f0e67c2",
+      "afterSha256": "9eb290218eef63f183ed46126361e0f3f7bc91690df422089de0c8c5ef34cc14",
+      "purpose": "Wire Pi/MCU/cloud availability to the stop button; remove Home return-dock callback."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/MainDashboard.kt",
+      "status": "modified",
+      "beforeSha256": "425a5695438b46b474640bd9ac327641183ec3ea3855e8af274fe0e202d0b971",
+      "afterSha256": "3535a000d61e6d5c4fc0b6a5adc3494f6a5ade83e030900781dce394ff42e947",
+      "purpose": "Remove the floating return dock and show explicit endpoint telemetry."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/MapScreen.kt",
+      "status": "modified",
+      "beforeSha256": "e6be51de9cec6a0291e293a020f24295868c3db1a8f99ce676c352bfc6cbefee",
+      "afterSha256": "e75ce4dbb8e42ebc0b8528fdab87895a54c156d26020ae0d4a53542a7372f68a",
+      "purpose": "Compact 320 dp drawing with unchanged ranges, cached geometry and static sleep state."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/OperatorViewModel.kt",
+      "status": "modified",
+      "beforeSha256": "278acb2c45daff3c9edffa230eb21020da2eeb83a9e9ce4e3dd30c5be6a89307",
+      "afterSha256": "9df9d623200a3e84cfccd72f94120cea027b8686e57c7621c22f2b371e68f566",
+      "purpose": "Sleep/wake session, release scan data on exit, cloud connection and lease lifecycle."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/ReturnScreen.kt",
+      "status": "modified",
+      "beforeSha256": "95252d638ed7184723592ad144c2c8ffb420a9a2986c365393fd75b3a14ead6a",
+      "afterSha256": "dd2c41700a491d0c3070c48e826a80321e74273adca942b24b07f9f5a827e649",
+      "purpose": "Place send action inside Activity and show last completed arrival."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/realtime/GarbyRealtimeDb.kt",
+      "status": "modified",
+      "beforeSha256": "286f8b7eba6bbed935c7abe39d3bdd30bc7df02f5f9ede851869ce059ad78be7",
+      "afterSha256": "4e35a3e2b8d2fbbe349ea1e861cc8671151f4c2a68d517f82fa12d386f708e21",
+      "purpose": "Decode current endpoint and last-arrival fields from Pi status."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/realtime/MapSession.kt",
+      "status": "created",
+      "beforeSha256": null,
+      "afterSha256": "63c4ee814c1bc2bf20c35c7fbd2dcee91276e921757fdfad8b549fdf1a15adaa",
+      "purpose": "Cancellable current-scan lifecycle with timeout and timestamp-only automatic wake."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/realtime/Models.kt",
+      "status": "modified",
+      "beforeSha256": "5ad5d5d46e7a349cc0315d1b7ab0840e18dbea857f1edc90a345bf959174fda1",
+      "afterSha256": "1bd332d2fe9da569984cc2258739a5c19c559dde393ea150b5363c3aa2ceb01b",
+      "purpose": "Type current location and retained last arrival."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt",
+      "status": "modified",
+      "beforeSha256": "d044f12c39a2bda6ae26c8ad37b885b4957a3042e39611801933674862168d56",
+      "afterSha256": "250e9668cf3f0843ff52104892f0909c3195847a6016699326cb242124956f05",
+      "purpose": "Provide scalar timestamp listener for sleeping maps; preserve pre-existing fields."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/realtime/OperatorModels.kt",
+      "status": "modified",
+      "beforeSha256": "48f947bc4568cebe1aa9f7d0d8bca53cda3e75d8acefa17288ef38220ef23f61",
+      "afterSha256": "229e93262e859af94ee908bbf57d1f08115c8cbdba33791ad1fa13604d6a07dc",
+      "purpose": "Require fresh Pi/MCU/cloud for phone stop; define ten-second map idle limit."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/ui/BottomBar.kt",
+      "status": "modified",
+      "beforeSha256": "e73abae7bd0443a56acdaf58b3904e1204dbc1de13f7bf5a339687c16cebc4d7",
+      "afterSha256": "2be3f9697a172f3b0f7a96bd467335b342f7b33c82e6f3f5b7b3ac90e5ef4080",
+      "purpose": "Disable phone stop with an explanation when Pi, MCU or cloud is unavailable."
+    },
+    {
+      "path": "app/src/main/java/com/thesis/garby/ui/StatusUi.kt",
+      "status": "modified",
+      "beforeSha256": "983807e044d789a6df7d53c07fdfaff15e9961f6c3213ceee5cafb2dd5307c3f",
+      "afterSha256": "7b05cfe19416ec0d12b9d940873a2477fc6b183fc780bc2d5f3e8227456aafa5",
+      "purpose": "Distinguish confirmed station/disposal arrival from generic IDLE."
+    },
+    {
+      "path": "app/src/test/java/com/thesis/garby/realtime/MapSessionTest.kt",
+      "status": "created",
+      "beforeSha256": null,
+      "afterSha256": "5efb68091c978b524bd0a292f91b30e4dd252f8332203a66a60a69b1be405620",
+      "purpose": "Virtual-clock sleep, listener disposal, wake, duplicate/stale input and timeout cases."
+    },
+    {
+      "path": "app/src/test/java/com/thesis/garby/realtime/OperatorModelsTest.kt",
+      "status": "modified",
+      "beforeSha256": "a25d1e9e51f1db7b101b1384169b399664aa5cb60274850f145af658de28678e",
+      "afterSha256": "3753ad758ec693764639cc6ed1ccc57ada669c79ad5786c4b087bf95907f0525",
+      "purpose": "Update stop availability and preemption cases, preserving earlier action tests."
+    },
+    {
+      "path": "app/src/test/java/com/thesis/garby/ui/RobotLocationTest.kt",
+      "status": "created",
+      "beforeSha256": null,
+      "afterSha256": "60b452f3b6532aebe8c15eb1a3d7330594b3058b7933eb25b70dce9dc0b3043d",
+      "purpose": "No invented station arrival from IDLE or unknown location."
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+[
+  {
+    "file": "README.md",
+    "status": "modified",
+    "before_sha256": "f0178a5152925099360dfef1b4754a49054fe3fa561f856c8109dc91f3ad733f",
+    "after_sha256": "27a2f1c78b5555a4153d67d6e1d2e8310df82315749d19f67578d9ddc3fbd985"
+  },
+  {
+    "file": "PATCH_NOTES.md",
+    "status": "modified",
+    "before_sha256": "cb23d7becdeab6e920a187dd3beddadc571ee19b951c61e5c461c77f28bf8214",
+    "after_sha256": "2ffdffa46155587b2df33061592054bdfe8f0d1fafe67d90f0a027ffe1ae27c8"
+  },
+  {
+    "file": "SYSTEM_ARCHITECTURE.md",
+    "status": "modified",
+    "before_sha256": "8591be7279a032666ed73dcd1a699f94410244406ca2668f38a703ac58d95939",
+    "after_sha256": "dc47952f1b6d9d9be28e947a8a332f8b2704f3a99fe942baecb3f0b81012a289"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/MainActivity.kt",
+    "status": "modified",
+    "before_sha256": "e5484970bdb5425a1c670390c66d691041fc92b24381b1aff2977ced10a998ed",
+    "after_sha256": "1cd7eb8b5b9732652d90f93be8b46f5ffe6c6f4f714a9fe4c96c49bc52c94308"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/StartScreen.kt",
+    "status": "modified",
+    "before_sha256": "f17f89c75412d6615662c2441dad93ceb579542af4b0a69aea895116592525d9",
+    "after_sha256": "e772dd3727a17f8d03831852fd785b3f02ad44f34194861b60557cd5bd8d649a"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/ui/BottomBar.kt",
+    "status": "modified",
+    "before_sha256": "3b9376d410c1358481108cb7bce1775d2606bfd975e68dcaeaf8b81461206009",
+    "after_sha256": "fb7d3168365da6ab069b5d2f5f9768ff7fd330969c5ad9ea796c97429526ef36"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/ui/glass/GlassMotion.kt",
+    "status": "modified",
+    "before_sha256": "6de827dbec30f6d09e30089e97cf4225a414c70725041e641b631f5af3db295a",
+    "after_sha256": "78bc2c5e3f84c569c13899978a3a552bc2c4073e8b6456077f14e8c11d04b6c9"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/ui/theme/Type.kt",
+    "status": "modified",
+    "before_sha256": "2589541b19242e33287c89e509106236b39837bc653eea2d5ec5bdff45f21c24",
+    "after_sha256": "232e1b5406d964895d054be44e64a2590686be5dab06f680ade9481867db8564"
+  },
+  {
+    "file": "docs/2026-11-17-performance-capture.md",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "acb815e853f115a1b27a95a177cf13c64c30ef4fb78ee0cb29329cc6fbd5a781"
+  }
+]

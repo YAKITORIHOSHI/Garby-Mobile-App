@@ -70,7 +70,6 @@ import com.thesis.garby.ui.formatTimeOfDay
 import com.thesis.garby.ui.glass.GlassButton
 import com.thesis.garby.ui.glass.GlassButtonStyle
 import com.thesis.garby.ui.glass.GlassDialog
-import com.thesis.garby.ui.glass.GlassDock
 import com.thesis.garby.ui.glass.GlassIconButton
 import com.thesis.garby.ui.glass.GlassPanel
 import com.thesis.garby.ui.glass.GlassScaffold
@@ -120,11 +119,11 @@ fun ReturnContent(
     onSend: () -> Unit,
     onDismissNotice: () -> Unit
 ) {
-    val robotUi = robotStateUi(state.status?.robotState, state.status?.isReadyToReturn)
+    val robotUi = robotStateUi(state.status?.robotState, state.status?.isReadyToReturn, state.status?.location)
     GlassScaffold(
         topBar = {
             GlassTopBar(
-                title = "Return to base",
+                title = "Activity",
                 subtitle = if (state.statusLoaded) robotUi.title else "Loading robot state…",
                 subtitleColor = if (state.statusLoaded) robotUi.color else GarbyColors.TextMuted,
                 navigationIcon = {
@@ -135,8 +134,7 @@ fun ReturnContent(
                     )
                 }
             )
-        },
-        bottomBar = { SendDock(state = state, onSend = onSend) }
+        }
     ) { padding ->
         val layoutDirection = LocalLayoutDirection.current
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -152,7 +150,26 @@ fun ReturnContent(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                state.status?.lastArrival?.let { arrival ->
+                    item(key = "last-arrival") {
+                        GlassPanel(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                if (arrival.point == com.thesis.garby.realtime.RobotLocation.PointA)
+                                    "Last completed arrival: point A · Station"
+                                else "Last completed arrival: point B · Disposal area",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = GarbyColors.TextPrimary
+                            )
+                            Text(
+                                "Confirmed ${formatAgo((state.nowMs - arrival.confirmedAtMs).coerceAtLeast(0L))}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = GarbyColors.TextMuted
+                            )
+                        }
+                    }
+                }
                 item(key = "intro") { IntroCard() }
+                item(key = "send-return") { SendReturnCard(state = state, onSend = onSend) }
                 state.notice?.let { notice ->
                     item(key = "notice") { NoticeCard(notice, onDismissNotice) }
                 }
@@ -401,7 +418,7 @@ private fun ReadinessCard(state: ReturnUiState) {
 private val PHONE_SIDE_CHECKS = setOf(ReturnCheck.Internet, ReturnCheck.Cloud)
 
 private fun checkDetail(check: ReturnCheck, state: ReturnUiState, status: DeviceStatus?): String = when (check) {
-    ReturnCheck.AtDestination -> "Now: " + robotStateUi(status?.robotState, status?.isReadyToReturn).title
+    ReturnCheck.AtDestination -> "Now: " + robotStateUi(status?.robotState, status?.isReadyToReturn, status?.location).title
     ReturnCheck.RobotOnline -> when (robotPresence(status, state.nowMs)) {
         RobotPresence.Live -> "Seen ${formatAgo(state.nowMs - (status?.lastSeenMs ?: 0L))}"
         RobotPresence.Stale -> "Last report ${formatAgo(state.nowMs - (status?.lastSeenMs ?: 0L))}"
@@ -465,9 +482,9 @@ private fun SafetyCard() {
 }
 
 @Composable
-private fun SendDock(state: ReturnUiState, onSend: () -> Unit) {
+private fun SendReturnCard(state: ReturnUiState, onSend: () -> Unit) {
     val readiness = state.readiness
-    GlassDock {
+    GlassPanel(modifier = Modifier.fillMaxWidth()) {
         val caption = when {
             state.submitting -> "Sending the request…"
             readiness.canSend -> "All checks passed."
@@ -480,6 +497,7 @@ private fun SendDock(state: ReturnUiState, onSend: () -> Unit) {
             color = if (readiness.canSend) GarbyColors.Ok else GarbyColors.TextSecondary,
             modifier = Modifier.padding(horizontal = 6.dp)
         )
+        Spacer(Modifier.height(10.dp))
         GlassButton(
             text = "Send back to base",
             onClick = onSend,

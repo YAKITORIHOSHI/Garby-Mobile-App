@@ -18,21 +18,18 @@ import com.thesis.garby.realtime.RtdbConstants
 import com.thesis.garby.realtime.evaluateReturnReadiness
 import com.thesis.garby.realtime.resolveReturnProgress
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.time.Duration.Companion.milliseconds
 
 /** Result of the last submission attempt, shown until dismissed or replaced. */
 sealed interface ReturnNotice {
@@ -76,7 +73,7 @@ class ReturnViewModel(private val savedState: SavedStateHandle) : ViewModel() {
     private companion object {
         const val KEY_TRACKED_AT = "return.trackedRequestedAt"
         const val KEY_TRACKED_BY = "return.trackedRequestedBy"
-        const val STOP_TIMEOUT_MS = 5_000L
+        const val STOP_TIMEOUT_MS = 0L
     }
 
     private val firebaseAuth = FirebaseAuth.getInstance()
@@ -132,12 +129,7 @@ class ReturnViewModel(private val savedState: SavedStateHandle) : ViewModel() {
         LocalInputs(trackedRequest, busy, lastNotice)
     }
 
-    private val clock = flow {
-        while (true) {
-            emit(System.currentTimeMillis())
-            delay(RtdbConstants.RETURN_TICK_MS.milliseconds)
-        }
-    }
+    private val clock = GarbyRealtimeDb.monitoringTimeMs
 
     val uiState: StateFlow<ReturnUiState> = combine(remoteInputs, localInputs, clock) { remote, local, now ->
         val serverNow = now + remote.serverOffsetMs
@@ -163,12 +155,12 @@ class ReturnViewModel(private val savedState: SavedStateHandle) : ViewModel() {
         )
     }
         .flowOn(GarbyDispatchers.background)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), ReturnUiState())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS, replayExpirationMillis = 0), ReturnUiState())
 
     val summary: StateFlow<ReturnSummary> = uiState
         .map { ReturnSummary(it.progress, it.readiness.canSend) }
         .distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), ReturnSummary())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS, replayExpirationMillis = 0), ReturnSummary())
 
     /**
      * Writes one return request after the operator's confirmation. The gate is evaluated again

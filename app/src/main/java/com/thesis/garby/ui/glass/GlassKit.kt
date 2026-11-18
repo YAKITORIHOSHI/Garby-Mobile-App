@@ -75,6 +75,7 @@ import com.thesis.garby.R
 import com.thesis.garby.performance.LocalPerformanceProfile
 import com.thesis.garby.ui.rememberResourceBitmap
 import com.thesis.garby.ui.hideSystemBars
+import com.thesis.garby.ui.withFloatingDockInset
 import com.thesis.garby.ui.theme.GarbyColors
 
 object GlassShapes {
@@ -234,7 +235,7 @@ fun GlassScaffold(
             contentWindowInsets = WindowInsets.safeDrawing
         ) { innerPadding ->
             Box(Modifier.fillMaxSize()) {
-                content(innerPadding)
+                content(innerPadding.withFloatingDockInset())
             }
         }
         // Keeps the status-bar icons legible over content scrolling beneath them.
@@ -309,33 +310,6 @@ fun GlassTopBar(
             }
             Row(verticalAlignment = Alignment.CenterVertically, content = actions)
         }
-    }
-}
-
-/** A floating frosted dock above the navigation bar, for the screen's primary action. */
-@Composable
-fun GlassDock(
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    val shape = RoundedCornerShape(30.dp)
-    Box(
-        modifier
-            .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-            .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(shape)
-                .glassFill(GlassTier.Thick)
-                .glassSheen(GlassTier.Thick)
-                .border(1.dp, GlassBorderBrush, shape)
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            content = content
-        )
     }
 }
 

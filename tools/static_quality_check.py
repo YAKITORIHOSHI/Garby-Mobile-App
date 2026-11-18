@@ -115,6 +115,43 @@ for relative, required in disposal_sources.items():
         if marker not in text:
             fail(f"Manual disposal invariant missing in {relative}: {marker}")
 
+# Keep the ViewModel and its database API together. A partial source update previously left
+# unresolved map helpers and a five-argument call against the old three-argument send method.
+operator_root = JAVA / "com/thesis/garby"
+operator_vm = (operator_root / "OperatorViewModel.kt").read_text(encoding="utf-8")
+operator_db = (operator_root / "realtime/OperatorDb.kt").read_text(encoding="utf-8")
+for name in ("observeWhileVisible", "observeMapWhileVisible"):
+    if not re.search(rf"suspend\s+fun\s+{name}\(\)\s*\{{", operator_vm):
+        fail(f"Operator observer {name} must use a Unit block body; a launch result is a Job")
+for label, pattern in {
+    "mapTimestamp": r"fun\s+mapTimestamp\([^)]*\)\s*:\s*Flow<Long>",
+    "ordinary send": r"suspend\s+fun\s+send\(\s*deviceId:\s*String,\s*uid:\s*String,\s*action:\s*OperatorAction\s*\)",
+    "configured send": r"suspend\s+fun\s+send\(\s*deviceId:\s*String,\s*uid:\s*String,\s*action:\s*OperatorAction,\s*sensors:\s*Int\?,\s*fast:\s*Boolean\?\s*\)",
+    "map session": r"suspend\s+fun\s+observeMapSession\(",
+}.items():
+    if not re.search(pattern, operator_db):
+        fail(f"OperatorDb {label} API missing; update it with OperatorViewModel.kt")
+if len(re.findall(r"suspend\s+fun\s+observeMapSession\(", source_text)) != 1:
+    fail("Exactly one observeMapSession definition is required; remove the superseded MapSession.kt")
+
+# A full operator-state subscription here used to invalidate the navigation host on each
+# clock tick and map frame. The dock must observe only its distinct stop-button projection.
+activity = (operator_root / "MainActivity.kt").read_text(encoding="utf-8")
+bottom_bar = (operator_root / "ui/BottomBar.kt").read_text(encoding="utf-8")
+if "operatorViewModel.uiState.collectAsStateWithLifecycle()" in activity:
+    fail("Navigation must not collect the full operator/map/clock state")
+for marker in ("viewModel.stopState.collectAsStateWithLifecycle()", "Alignment.BottomCenter", "LocalFloatingDockInset"):
+    if marker not in activity:
+        fail(f"Floating dock state/layout contract missing: {marker}")
+if ".background(GarbyColors.Night)" in bottom_bar:
+    fail("The floating dock must not paint an opaque background outside its glass container")
+for relative in ("OperatorViewModel.kt", "ReturnViewModel.kt", "realtime/DeviceViewModel.kt"):
+    text = (operator_root / relative).read_text(encoding="utf-8")
+    if "GarbyRealtimeDb.monitoringTimeMs" not in text:
+        fail(f"Use the shared monitoring clock in {relative}")
+if "delay(1_000L.milliseconds)" in operator_vm:
+    fail("Operator monitoring must use callbacks/shared time instead of per-second auth/network polling")
+
 # The published APK is the CI release build, always signed with the one persistent key:
 # a different key forces every phone to uninstall the app before it can update.
 WORKFLOW = ROOT / ".github/workflows/android.yml"

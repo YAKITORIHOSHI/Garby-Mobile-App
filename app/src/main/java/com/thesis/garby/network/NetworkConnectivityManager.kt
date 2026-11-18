@@ -49,15 +49,34 @@ object NetworkConnectivityManager {
         _isInternetAvailable.value = hasValidatedInternet(manager)
 
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) = refreshState()
-            override fun onLost(network: Network) = refreshState()
+            private var currentNetwork: Network? = manager.activeNetwork
+
+            override fun onAvailable(network: Network) {
+                currentNetwork = network
+                // Android 8+ follows with capabilities; an available Wi-Fi link alone
+                // must not announce internet access (for example a captive portal).
+            }
+
+            override fun onLost(network: Network) {
+                if (network == currentNetwork) {
+                    currentNetwork = null
+                    _isInternetAvailable.value = false
+                }
+            }
 
             override fun onCapabilitiesChanged(
                 network: Network,
                 networkCapabilities: NetworkCapabilities
-            ) = refreshState()
+            ) {
+                if (network == currentNetwork) {
+                    _isInternetAvailable.value = hasValidatedInternet(networkCapabilities)
+                }
+            }
 
-            override fun onUnavailable() = refreshState()
+            override fun onUnavailable() {
+                currentNetwork = null
+                _isInternetAvailable.value = false
+            }
         }
 
         try {
@@ -82,17 +101,15 @@ object NetworkConnectivityManager {
         return hasValidatedInternet(manager)
     }
 
-    private fun refreshState() {
-        val manager = connectivityManager
-        _isInternetAvailable.value = manager != null && hasValidatedInternet(manager)
-    }
+    private fun hasValidatedInternet(capabilities: NetworkCapabilities): Boolean =
+        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
 
     private fun hasValidatedInternet(manager: ConnectivityManager): Boolean {
         return try {
             val network = manager.activeNetwork ?: return false
             val capabilities = manager.getNetworkCapabilities(network) ?: return false
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            hasValidatedInternet(capabilities)
         } catch (e: SecurityException) {
             Log.w(TAG, "Connectivity check denied", e)
             false

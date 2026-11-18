@@ -1,0 +1,61 @@
+--- before/app/src/main/java/com/thesis/garby/MapScreen.kt
++++ app/src/main/java/com/thesis/garby/MapScreen.kt
+@@ -102,8 +102,10 @@
+         Column(
+             Modifier
+                 .fillMaxSize()
++                .verticalScroll(rememberScrollState())
++                // Keep bar clearance in the scroll content, so the viewport reaches
++                // behind both floating bars rather than ending at an empty strip.
+                 .padding(padding)
+-                .verticalScroll(rememberScrollState())
+                 .padding(horizontal = 16.dp, vertical = 12.dp),
+             horizontalAlignment = Alignment.CenterHorizontally,
+             verticalArrangement = Arrangement.spacedBy(12.dp)
+--- before/app/src/main/java/com/thesis/garby/ControlsScreen.kt
++++ app/src/main/java/com/thesis/garby/ControlsScreen.kt
+@@ -243,8 +243,10 @@
+             Column(
+                 Modifier
+                     .fillMaxSize()
++                    .verticalScroll(rememberScrollState())
++                    // Scroll beneath the floating header/dock; their clearance
++                    // belongs to the content rather than the viewport bounds.
+                     .padding(padding)
+-                    .verticalScroll(rememberScrollState())
+                     .padding(horizontal = 16.dp, vertical = 12.dp),
+                 horizontalAlignment = Alignment.CenterHorizontally,
+                 verticalArrangement = Arrangement.spacedBy(12.dp)
+--- before/PATCH_NOTES.md
++++ PATCH_NOTES.md
+@@ -1,4 +1,15 @@
+ # GARBY Mobile App - Patch Notes
++
++## Map/Controls content behind floating bars — 2026-11-17
++
++- Moved Map and Controls/Developer scaffold padding inside their scrolling content. Their
++  viewport now extends behind the floating top bar and bottom tabs/emergency-stop container,
++  matching Home and Activity. Previously outer padding stopped content at the bars and
++  exposed a solid-looking background strip. End spacing still lets the last item scroll clear
++  of the dock. Red/rose colors, glass surfaces, command gates and polling are unchanged.
++- Source/static checks recorded in `docs/verification/2026-11-17-floating-scroll/`. Android
++  compilation/layout cannot run on this host without Gradle/SDK access; rebuild the existing
++  benchmark variant on Windows for the visual check. MCU upload/Pi deployment: None.
+ 
+ ## Connect-screen rendering and debug-build diagnosis — 2026-11-17
+ 
+--- before/SYSTEM_ARCHITECTURE.md
++++ SYSTEM_ARCHITECTURE.md
+@@ -70,6 +70,12 @@
+ the Controls frame add it to content padding while backgrounds fill the whole page. The dock's
+ outer box is transparent; only its rounded glass container and controls paint a background.
+ The original red/rose palette and control command contracts are preserved.
++
++Map and Controls/Developer apply that padding after `verticalScroll` in their modifier
++chain. It therefore scrolls with the content instead of shrinking the viewport before the
++header or dock. Content can pass behind both floating glass bars; the initial/final padding
++still leaves the first and last items reachable. Home and Activity use lazy content padding
++for the same behavior. Neither the bars' hit targets nor their control gates change.
+ 
+ These changes remove known shared work across device brands. They do not establish a new
+ frame rate without a fresh release-build trace on a phone. Implementation follows the official

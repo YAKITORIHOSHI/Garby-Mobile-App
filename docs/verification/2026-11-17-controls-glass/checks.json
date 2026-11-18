@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-17",
+  "commands": [
+    {
+      "command": "python3 -B tools/static_quality_check.py",
+      "exitCode": 0,
+      "log": "static-quality.log",
+      "scope": "Existing source-only checker"
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0,
+      "log": "diff-check.log"
+    },
+    {
+      "command": "Source comparison of control bindings, confirmations, masks, gates and delimiters",
+      "exitCode": 0,
+      "log": "control-scope-check.log"
+    },
+    {
+      "command": "Text contrast calculation against opaque fills with maximum white sheen",
+      "exitCode": 0,
+      "log": "contrast.json",
+      "minRatio": 4.65,
+      "maxRatio": 13.22
+    },
+    {
+      "command": "env GRADLE_USER_HOME=/tmp/garby-mobile-gradle-20261117 bash gradlew --offline --no-daemon :app:compileDebugKotlin :app:lintDebug",
+      "exitCode": 1,
+      "status": "blocked_before_compilation",
+      "log": "gradle.log",
+      "reason": "Gradle distribution not cached; network sockets denied (Operation not permitted)"
+    }
+  ],
+  "rendering": "design-reference.svg rendered through Rsvg for visual review; not an Android screenshot",
+  "androidPreviews": "Controls, Developer and 1.5x text previews added; Android renderer not exercised",
+  "testsAdded": false,
+  "apkBuilt": false,
+  "onDeviceChecked": false,
+  "mcuUploadRequirement": "None",
+  "piDeploymentRequirement": "None for this UI-only task",
+  "previousRequirement": "Earlier ARRIVAL-20261117 Executor/Pi requirement remains separate; installed versions unknown",
+  "hardwareActionsPerformed": false,
+  "liveDatabaseModified": false,
+  "windowsConfigurationPreserved": true,
+  "operatorConsumersPreserved": true
+}

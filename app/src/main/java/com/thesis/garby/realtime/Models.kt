@@ -36,6 +36,21 @@ enum class RobotState(val wireValue: String) {
     }
 }
 
+/** Current route endpoint as confirmed by executor completion telemetry. */
+enum class RobotLocation(val wire: String) {
+    PointA("POINT_A"), PointB("POINT_B"), InTransit("IN_TRANSIT"), Unknown("UNKNOWN");
+
+    companion object {
+        fun fromWire(value: String?): RobotLocation? =
+            value?.takeIf { it.isNotBlank() }?.let { text ->
+                entries.firstOrNull { it.wire == text } ?: Unknown
+            }
+    }
+}
+
+/** The last endpoint confirmed by a completed executor route; retained while travelling. */
+data class RouteArrival(val point: RobotLocation, val confirmedAtMs: Long)
+
 /**
  * The Pi's status record. Every field is nullable or zero when the Pi has not reported it, so
  * the app never shows an invented value. Freshness is judged from [lastSeenMs] at display time.
@@ -56,7 +71,10 @@ data class DeviceStatus(
     val sensorSerialConnected: Boolean? = null,
     /** Fresh Pi + executor eligibility for threshold-free disposal, never motion permission. */
     val manualDisposalReady: Boolean? = null,
-    val manualDisposalUpdatedAtMs: Long = 0L
+    val manualDisposalUpdatedAtMs: Long = 0L,
+    val location: RobotLocation? = null,
+    val locationUpdatedAtMs: Long = 0L,
+    val lastArrival: RouteArrival? = null
 )
 
 /** Wire statuses of `devices/<id>/commands/reset`, written by the app (pending) and the Pi. */

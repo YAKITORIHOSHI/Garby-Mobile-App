@@ -1,0 +1,11 @@
+PASS: checker rejects pre-fix observer returning Job
+STATIC_QUALITY_CHECK: FAIL
+ - Operator observer observeWhileVisible must use a Unit block body; a launch result is a Job
+ - Operator observer observeMapWhileVisible must use a Unit block body; a launch result is a Job
+
+PASS: checker rejects new ViewModel mixed with old OperatorDb
+STATIC_QUALITY_CHECK: FAIL
+ - OperatorDb mapTimestamp API missing; update it with OperatorViewModel.kt
+ - OperatorDb configured send API missing; update it with OperatorViewModel.kt
+ - OperatorDb map session API missing; update it with OperatorViewModel.kt
+ - Exactly one observeMapSession definition is required; remove the superseded MapSession.kt

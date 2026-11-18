@@ -1,0 +1,188 @@
+[
+  {
+    "file": "app/src/main/java/com/thesis/garby/OperatorViewModel.kt",
+    "status": "modified",
+    "before_sha256": "636a80149d576c387d451d49244dd2ff8b5213fa64d7a959bdaa9e035aadd246",
+    "after_sha256": "4a719ffe7cf8c923e064eb51add07f232434eed83071152350c3fa7f4a81e5a1"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/MainDashboard.kt",
+    "status": "modified",
+    "before_sha256": "3535a000d61e6d5c4fc0b6a5adc3494f6a5ade83e030900781dce394ff42e947",
+    "after_sha256": "2fa06cba692572ba7c9f2c61bae0501c208e1a8b4fbc7d9d47c99ee45c1d8782"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/MainActivity.kt",
+    "status": "modified",
+    "before_sha256": "1cd7eb8b5b9732652d90f93be8b46f5ffe6c6f4f714a9fe4c96c49bc52c94308",
+    "after_sha256": "cf6ade442901f4422d0b1d666b9cc136fb1863f43f76a0537cd7a45578ed76cf"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/StartScreen.kt",
+    "status": "modified",
+    "before_sha256": "e772dd3727a17f8d03831852fd785b3f02ad44f34194861b60557cd5bd8d649a",
+    "after_sha256": "7fd6797676f3199a1c3c19a21e2754e9cb93f39850e86f4585bfff4fe081d1b0"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/MapScreen.kt",
+    "status": "modified",
+    "before_sha256": "4815f9b71f27332c2d6dcb562ac3446a4fb00954291303c3d3bd0b895fe5bdf1",
+    "after_sha256": "49d5e34b10282d8c7c2c4f9d145042b298aeb828fa78ef034f318b6c1be6e379"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/firestore/AuthViewModel.kt",
+    "status": "modified",
+    "before_sha256": "0e48723e7ded7c3c3d2d492f341b9fcdd3323c9c46fd3030e8fd2c42138881fc",
+    "after_sha256": "8f5bce450cf7ea07c0707319eda184a5499d13d4d8f823c57195096dc9bce0e7"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/network/NetworkConnectivityManager.kt",
+    "status": "modified",
+    "before_sha256": "7e96bbd1fc61249a703b6fb74d606293cda54036191e07896ffc20048882369c",
+    "after_sha256": "0fa13c49ac8bcd1f58676c4332db2f579b9b2f6c84044a1bd448042ec5906094"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/ui/glass/GlassVisuals.kt",
+    "status": "modified",
+    "before_sha256": "e496de1347bf29d84e2b207b1e951f212c33ab9a85f65e38e458644603da15b3",
+    "after_sha256": "f670588e1894a42bcbc36f72e148c21089a899c3d06c595a2ffa6e82910b4a8c"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/ui/glass/GlassMotion.kt",
+    "status": "modified",
+    "before_sha256": "78bc2c5e3f84c569c13899978a3a552bc2c4073e8b6456077f14e8c11d04b6c9",
+    "after_sha256": "7cdbe3f04c993650321a5bee356601c67a567cb3cfb1779383efbf102816de35"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/ui/glass/GlassKit.kt",
+    "status": "modified",
+    "before_sha256": "7ca284e170702a8d3a445852796dcbc7e5b223e8b511839f9dc6b955865a9344",
+    "after_sha256": "d900ae5f5a19512d95a879f177d1af2c94638375049fd30942bc5e3968254076"
+  },
+  {
+    "file": "PATCH_NOTES.md",
+    "status": "modified",
+    "before_sha256": "7f778cc91e939885ea0112357a12cbf4d98cdd96bf6af6db92dbf650408bb33a",
+    "after_sha256": "c7b04901bf802059d4b0d69eface22a2d6fc8202186adab683cbde5b2b64f6cd"
+  },
+  {
+    "file": "SYSTEM_ARCHITECTURE.md",
+    "status": "modified",
+    "before_sha256": "1b10d82c10f1fd2c45fe3d7a08cc62d099a6a84d45c5251dda3e82ea3159b32a",
+    "after_sha256": "805bff380ecc9329d0f44fce60d223d1a9f19cb0377ac2d0fee41084e5a0358c"
+  },
+  {
+    "file": "README.md",
+    "status": "modified",
+    "before_sha256": "27a2f1c78b5555a4153d67d6e1d2e8310df82315749d19f67578d9ddc3fbd985",
+    "after_sha256": "a95f0edad4ce663c2d80f2ea8fffe17ddd004792bc7051479c1ef67672c2a31c"
+  },
+  {
+    "file": "app/src/test/java/com/thesis/garby/realtime/RobotActivityTest.kt",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "a3bcb2079fab637282ffc8d4aa9f0fc5146c9758e5e6af17404702fb9ebc8913"
+  },
+  {
+    "file": "app/src/test/java/com/thesis/garby/network/InternetSessionTest.kt",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "7ae63e12af2bc1796ade31f7d80537386ec136d3f9d829515e1e9164e1f6460e"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/ui/RobotActivityCard.kt",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "487d982d782d47c03aaf3a9c6fad9945017da2e173bf2cf2c666e4839b1fb077"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/realtime/RobotActivity.kt",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "5ddf8a05ed3ebc84cee0c3602e924bdca66f51575bf2a7cc8b3e2c3f37a8d301"
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/network/InternetSession.kt",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "1790593576d1ac9b1cf417fad23ea52a8f3a6655b9f9b1098de5c65f520ae9f5"
+  },
+  {
+    "file": "docs/verification/2026-11-17-inspection-map/VERIFICATION.md",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "a02eb4163b0bf148d9cd0de648dee9e7a5558e9c239627b4fb3a6f66b8781ae9"
+  },
+  {
+    "file": "docs/verification/2026-11-17-inspection-map/changes.patch",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "11e5f5e6a78c6c7e9f2c017a4420ca793fda10ef86047b6cec93bb327f9b51b2"
+  },
+  {
+    "file": "docs/verification/2026-11-17-inspection-map/checks.json",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "58f79f0cdf2a32f9e919375a1f3a54dfacdaf201b81f6842603353f604dc524b"
+  },
+  {
+    "file": "docs/verification/2026-11-17-inspection-map/diff-check.log",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "4a6c8102d7f751be91ee4c3e174f23b2cd7827180b4182329a753f3f2112b95e"
+  },
+  {
+    "file": "docs/verification/2026-11-17-inspection-map/gradle-check.json",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "77752611211309e3dc67c7e6bd2ef25626299ba900e47ef16beb3b4cef456b63"
+  },
+  {
+    "file": "docs/verification/2026-11-17-inspection-map/gradle.log",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "f9c9e7b9732c36094927e4d8c86d115b29268dbce0094998919486fa2f691ea1"
+  },
+  {
+    "file": "docs/verification/2026-11-17-inspection-map/preserved-files.json",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "76c43773027b9c9fb355c9f91ada59e4b3403a18332b7aac577144bb87c05834"
+  },
+  {
+    "file": "docs/verification/2026-11-17-inspection-map/production-changes.json",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "0f176d2ef03082bc4ed4aade12f97d2dce26dd222573188cf3cff0a8c42a4d01"
+  },
+  {
+    "file": "docs/verification/2026-11-17-inspection-map/scope-checks.log",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "8b9d25b0de7d43f1b925ad99d467ca065cd385ed3992536214d23cccbb3c0eca"
+  },
+  {
+    "file": "docs/verification/2026-11-17-inspection-map/source-after.json",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "f8eb0c64f0b34a720b6b4bb5d8016f87bf33f82ca65aa85e77280bca18f4ce91"
+  },
+  {
+    "file": "docs/verification/2026-11-17-inspection-map/source-before.json",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "de686f2f0d1d507c82d5f8f0ebde3199c5e98edda4752e829ffc1f1abaee33a8"
+  },
+  {
+    "file": "docs/verification/2026-11-17-inspection-map/source-review.log",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "61bd4fe480e78d552119571e4cee10010be41e53bd7f54802315b3db35e3cf8d"
+  },
+  {
+    "file": "docs/verification/2026-11-17-inspection-map/static-quality.log",
+    "status": "created",
+    "before_sha256": null,
+    "after_sha256": "c4285eba39cb5cf7ab04057a8d56f6230d6873d2e202c95e62fb285201e0c9bc"
+  }
+]

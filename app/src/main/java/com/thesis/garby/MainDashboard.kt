@@ -106,13 +106,14 @@ import com.thesis.garby.ui.airSectionIndicator
 import com.thesis.garby.ui.binSectionIndicator
 import com.thesis.garby.ui.formatAgo
 import com.thesis.garby.ui.formatDecimal
+import com.thesis.garby.ui.RobotActivityCard
+import com.thesis.garby.realtime.RobotActivityState
 import com.thesis.garby.ui.formatTimeOfDay
 import com.thesis.garby.ui.glass.BandBar
 import com.thesis.garby.ui.glass.BarBand
 import com.thesis.garby.ui.glass.GlassButton
 import com.thesis.garby.ui.glass.GlassButtonStyle
 import com.thesis.garby.ui.glass.GlassDialog
-import com.thesis.garby.ui.glass.GlassDock
 import com.thesis.garby.ui.glass.GlassIconButton
 import com.thesis.garby.ui.glass.GlassPanel
 import com.thesis.garby.ui.glass.GlassScaffold
@@ -125,7 +126,6 @@ import com.thesis.garby.ui.glass.RoutePosition
 import com.thesis.garby.ui.glass.RouteTrack
 import com.thesis.garby.ui.glass.SectionHeader
 import com.thesis.garby.ui.glass.ShimmerPanel
-import com.thesis.garby.ui.glass.StatusDot
 import com.thesis.garby.ui.glass.StatusPill
 import com.thesis.garby.ui.healthColor
 import com.thesis.garby.ui.returnStageUi
@@ -139,7 +139,7 @@ import java.util.Locale
 @Composable
 fun MainDashboard(
     returnViewModel: ReturnViewModel,
-    onOpenReturn: () -> Unit,
+    operatorViewModel: OperatorViewModel,
     onSignOut: () -> Unit,
     deviceViewModel: DeviceViewModel = viewModel()
 ) {
@@ -156,10 +156,10 @@ fun MainDashboard(
     DashboardContent(
         state = state,
         summary = summary,
-        onOpenReturn = onOpenReturn,
         onSignOut = { confirmSignOut = true },
         onManualDisposal = deviceViewModel::requestDisposal,
-        onDismissDisposalNotice = deviceViewModel::clearDisposalNotice
+        onDismissDisposalNotice = deviceViewModel::clearDisposalNotice,
+        activityContent = { LiveRobotActivityCard(operatorViewModel) }
     )
 
     if (confirmSignOut) {
@@ -173,14 +173,21 @@ fun MainDashboard(
     }
 }
 
+/** Only this card observes execution updates; the grid does not collect operator/map state. */
+@Composable
+private fun LiveRobotActivityCard(viewModel: OperatorViewModel) {
+    val state by viewModel.activityState.collectAsStateWithLifecycle()
+    RobotActivityCard(state)
+}
+
 @Composable
 fun DashboardContent(
     state: DeviceUiState,
     summary: ReturnSummary,
-    onOpenReturn: () -> Unit,
     onSignOut: () -> Unit,
     onManualDisposal: () -> Unit = {},
-    onDismissDisposalNotice: () -> Unit = {}
+    onDismissDisposalNotice: () -> Unit = {},
+    activityContent: @Composable () -> Unit = { RobotActivityCard(RobotActivityState()) }
 ) {
     var confirmDisposal by rememberSaveable { mutableStateOf(false) }
     val disposalBlocked = disposalBlockReason(state.device.status, state.cloudConnected,
@@ -205,9 +212,6 @@ fun DashboardContent(
                     )
                 }
             )
-        },
-        bottomBar = {
-            ReturnDock(summary = summary, robotState = robotState, onOpenReturn = onOpenReturn)
         }
     ) { padding ->
         val layoutDirection = LocalLayoutDirection.current
@@ -228,6 +232,7 @@ fun DashboardContent(
                 fullWidth("connectivity") { ConnectivityBanner(issue) }
             }
             fullWidth("hero") { RobotHeroCard(state = state, summary = summary) }
+            fullWidth("current-activity") { activityContent() }
             fullWidth("manual-disposal") {
                 ManualDisposalCard(state, disposalBlocked,
                     onStart = { confirmDisposal = true },
@@ -407,7 +412,7 @@ private fun RobotHeroCard(state: DeviceUiState, summary: ReturnSummary) {
     }
     val status = device.status
     val presence = state.presence
-    val ui = robotStateUi(status?.robotState, status?.isReadyToReturn)
+    val ui = robotStateUi(status?.robotState, status?.isReadyToReturn, status?.location)
     val live = presence == RobotPresence.Live && state.cloudConnected
     val accent = if (presence == RobotPresence.NeverSeen) GarbyColors.Neutral else ui.color
 
@@ -525,59 +530,6 @@ private fun ReturnRequestLine(progress: ReturnProgress, nowMs: Long) {
             style = MaterialTheme.typography.bodySmall,
             color = GarbyColors.TextMuted
         )
-    }
-}
-
-@Composable
-private fun ReturnDock(summary: ReturnSummary, robotState: RobotState?, onOpenReturn: () -> Unit) {
-    val progress = summary.progress
-    GlassDock {
-        when {
-            progress?.inFlight == true -> {
-                val stage = returnStageUi(progress.stage)
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp)) {
-                    StatusDot(stage.color)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = if (progress.stage == ReturnStage.Returning) {
-                            "GARBY accepted the return and is driving back."
-                        } else {
-                            "Return sent. Waiting for GARBY to accept it."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = GarbyColors.TextSecondary
-                    )
-                }
-                GlassButton(
-                    text = "Track return",
-                    onClick = onOpenReturn,
-                    style = GlassButtonStyle.Secondary,
-                    icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            summary.canSend -> {
-                Text(
-                    text = "GARBY is waiting at the collection point.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = GarbyColors.TextSecondary,
-                    modifier = Modifier.padding(horizontal = 6.dp)
-                )
-                GlassButton(
-                    text = "Send back to base",
-                    onClick = onOpenReturn,
-                    icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            else -> GlassButton(
-                text = if (robotState == RobotState.AtDestination) "Return to base (checks pending)" else "Return to base",
-                onClick = onOpenReturn,
-                style = GlassButtonStyle.Secondary,
-                icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
     }
 }
 
@@ -1036,7 +988,6 @@ private fun DashboardPreview() {
                 ),
                 canSend = true
             ),
-            onOpenReturn = {},
             onSignOut = {}
         )
     }
@@ -1049,7 +1000,6 @@ private fun DashboardDrivingPreview() {
         DashboardContent(
             state = previewDeviceState(RobotState.Outbound),
             summary = ReturnSummary(),
-            onOpenReturn = {},
             onSignOut = {}
         )
     }

@@ -1,0 +1,12 @@
+{
+  "app/src/main/java/com/thesis/garby/ControlsScreen.kt": "1fed97243c2fd0de3c89952f730c24311931fab8997cb52fc90629c850f0dd8d",
+  "README.md": "f5601c85cb6fe347fa512ed430bf4c0f7d1a4da025faf229892cee82dc52671c",
+  "SYSTEM_ARCHITECTURE.md": "5d577d61f66fe67d641dae6f4061c973501bad61c4472c6a806956461a02686d",
+  "PATCH_NOTES.md": "19ca38f971673bf62635b428b80c3d16ad3fea58362eef6eb7cfdb2ddf87d525",
+  "local.properties": "9fe5602b099412976a02a1f66bb733f022df4777e903c9ca3e61c40ce5ddaf11",
+  "settings.gradle.kts": "d772c595bf5f0d887a66bf5444778250200cdb92c4453eb6aa1e97066fa247a8",
+  "gradle.properties": "e03e85114266d406aa5ee13f9e439481d74a722fe5c3b7464f3690616e9fa8c8",
+  "app/src/main/java/com/thesis/garby/OperatorViewModel.kt": "9cf11f975fad678d946f5700e5061b35e0289393dd9fd560aceff19423e94aa7",
+  "app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt": "3c729abf8d14141ae111d1dde164d1d6d65d9552240c25c842acbcec33220483",
+  "app/src/main/java/com/thesis/garby/realtime/OperatorModels.kt": "229e93262e859af94ee908bbf57d1f08115c8cbdba33791ad1fa13604d6a07dc"
+}

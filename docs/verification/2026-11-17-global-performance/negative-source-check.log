@@ -1,0 +1,11 @@
+PASS: checker rejects the old navigation, independent clock and opaque-dock sources.
+STATIC_QUALITY_CHECK: FAIL
+ - Navigation must not collect the full operator/map/clock state
+ - Floating dock state/layout contract missing: viewModel.stopState.collectAsStateWithLifecycle()
+ - Floating dock state/layout contract missing: Alignment.BottomCenter
+ - Floating dock state/layout contract missing: LocalFloatingDockInset
+ - The floating dock must not paint an opaque background outside its glass container
+ - Use the shared monitoring clock in OperatorViewModel.kt
+ - Use the shared monitoring clock in ReturnViewModel.kt
+ - Use the shared monitoring clock in realtime/DeviceViewModel.kt
+ - Operator monitoring must use callbacks/shared time instead of per-second auth/network polling

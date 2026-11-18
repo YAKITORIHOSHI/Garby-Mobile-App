@@ -1,0 +1,19 @@
+{
+  "app/src/main/java/com/thesis/garby/MapScreen.kt": "4815f9b71f27332c2d6dcb562ac3446a4fb00954291303c3d3bd0b895fe5bdf1",
+  "app/src/main/java/com/thesis/garby/ControlsScreen.kt": "0f0e0397dbdc97456ec9cb425dbc28ef6379897d8dc892d773e88421811c5bb3",
+  "app/src/main/java/com/thesis/garby/MainActivity.kt": "1cd7eb8b5b9732652d90f93be8b46f5ffe6c6f4f714a9fe4c96c49bc52c94308",
+  "app/src/main/java/com/thesis/garby/MainDashboard.kt": "3535a000d61e6d5c4fc0b6a5adc3494f6a5ade83e030900781dce394ff42e947",
+  "app/src/main/java/com/thesis/garby/ReturnScreen.kt": "dd2c41700a491d0c3070c48e826a80321e74273adca942b24b07f9f5a827e649",
+  "app/src/main/java/com/thesis/garby/ui/BottomBar.kt": "fb7d3168365da6ab069b5d2f5f9768ff7fd330969c5ad9ea796c97429526ef36",
+  "app/src/main/java/com/thesis/garby/ui/glass/GlassKit.kt": "7ca284e170702a8d3a445852796dcbc7e5b223e8b511839f9dc6b955865a9344",
+  "app/src/main/java/com/thesis/garby/OperatorViewModel.kt": "636a80149d576c387d451d49244dd2ff8b5213fa64d7a959bdaa9e035aadd246",
+  "app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt": "3c729abf8d14141ae111d1dde164d1d6d65d9552240c25c842acbcec33220483",
+  "app/src/main/java/com/thesis/garby/ui/theme/Color.kt": "5d3ea70f173ede38e8243e9facb2a1058bc170a9fc4fd0c1d769fea1da092842",
+  "local.properties": "9fe5602b099412976a02a1f66bb733f022df4777e903c9ca3e61c40ce5ddaf11",
+  "app/build.gradle.kts": "8944027fdd4612e88d026eee6f7db87f46681467f795cde7ce0be71fe86b2aee",
+  "settings.gradle.kts": "d772c595bf5f0d887a66bf5444778250200cdb92c4453eb6aa1e97066fa247a8",
+  "gradle.properties": "e03e85114266d406aa5ee13f9e439481d74a722fe5c3b7464f3690616e9fa8c8",
+  "gradle/libs.versions.toml": "888f550418a4436d4128ead51940b94f608c5aa6fc26bfc3b629c799d511f8a9",
+  "PATCH_NOTES.md": "7f778cc91e939885ea0112357a12cbf4d98cdd96bf6af6db92dbf650408bb33a",
+  "SYSTEM_ARCHITECTURE.md": "1b10d82c10f1fd2c45fe3d7a08cc62d099a6a84d45c5251dda3e82ea3159b32a"
+}

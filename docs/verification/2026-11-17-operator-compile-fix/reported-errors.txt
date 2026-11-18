@@ -1,0 +1,5 @@
+Return type mismatch: expected Unit, actual Job.
+Unresolved reference observeMapSession (import and call).
+Unresolved reference mapTimestamp.
+Cannot infer type for value parameter frame.
+Two extra arguments to the older three-argument OperatorDb.send.

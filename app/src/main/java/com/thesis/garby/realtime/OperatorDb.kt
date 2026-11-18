@@ -17,14 +17,22 @@ import kotlin.coroutines.resumeWithException
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** What became of a request this phone tried to write. */
 sealed interface OperatorSubmission {
@@ -111,15 +119,41 @@ object OperatorDb {
             robotState = snapshot.string("robotState").orEmpty(),
             frontReadOnly = snapshot.bool("frontReadOnly") ?: false,
             backReadOnly = snapshot.bool("backReadOnly") ?: false,
+            sideReadOnly = snapshot.bool("sideReadOnly") ?: false,
             readOnlyAllowed = snapshot.bool("readOnlyAllowed") ?: false,
             motionHold = snapshot.string("motionHold").orEmpty(),
             zones = snapshot.string("zones").orEmpty(),
             routeLeg = snapshot.string("routeLeg").orEmpty(),
             people = (snapshot.long("people") ?: 0L).toInt(),
             objects = (snapshot.long("objects") ?: 0L).toInt(),
+            developerEnabled = snapshot.bool("developerEnabled") ?: false,
+            developerPending = snapshot.bool("developerPending") ?: false,
+            developerResult = snapshot.string("developerResult").orEmpty(),
+            developerMessage = snapshot.string("developerMessage").orEmpty(),
+            developerBlocked = snapshot.string("developerBlocked").orEmpty(),
+            developerRun = extractRun(snapshot.child("developerRun")),
             launcherMode = launcher.string("mode").orEmpty(),
             launcherStartedAtMs = launcher.long("startedAt") ?: 0L,
             software = launcher.string("software").orEmpty()
+        )
+    }
+
+    /** The Pi's RunStart tab; null from robot software that does not publish it. */
+    private fun extractRun(run: DataSnapshot): DeveloperRun? {
+        if (!run.exists()) return null
+        return DeveloperRun(
+            known = run.bool("known") ?: false,
+            place = RunPlace.fromWire(run.string("place")),
+            running = run.bool("running") ?: false,
+            waitingRelease = run.bool("waitingRelease") ?: false,
+            mode = run.string("mode").orEmpty(),
+            message = run.string("message").orEmpty(),
+            steps = parseRunSteps(run.string("steps")),
+            step = (run.long("step") ?: 0L).toInt(),
+            done = run.long("done")?.toInt(),
+            speed = run.long("speed")?.toInt(),
+            accel = run.long("accel")?.toInt(),
+            runningStep = run.long("runningStep")?.toInt()
         )
     }
 
@@ -147,6 +181,14 @@ object OperatorDb {
         requireValid(deviceId)
         return snapshots("devices/$deviceId/map/frame").map { extractFrame(it) }
             .conflate().flowOn(GarbyDispatchers.background)
+    }
+
+    /** Sleeping maps retain only this scalar listener, rather than a decoded scan/snapshot. */
+    fun mapTimestamp(deviceId: String = RtdbConstants.DEFAULT_DEVICE_ID): Flow<Long> {
+        requireValid(deviceId)
+        return snapshots("devices/$deviceId/map/frame/at")
+            .map { (it.value as? Number)?.toLong() ?: 0L }
+            .distinctUntilChanged().flowOn(GarbyDispatchers.background)
     }
 
     private fun extractFrame(snapshot: DataSnapshot): MapFrame? {
@@ -202,11 +244,27 @@ object OperatorDb {
         else -> MapLease.Failed
     }
 
+    /** Keep the ordinary three-argument API alongside configured developer requests. */
+    suspend fun send(deviceId: String, uid: String, action: OperatorAction): OperatorSubmission =
+        send(deviceId, uid, action, sensors = null, fast = null)
+
+    /** Bench tests and nudges: no RunStart list. */
+    suspend fun send(deviceId: String, uid: String, action: OperatorAction, sensors: Int?, fast: Boolean?): OperatorSubmission =
+        send(deviceId, uid, action, sensors, fast, run = null)
+
     /**
      * Write one operator request. The transaction refuses to overwrite a request the Pi is still
-     * working on, except for an emergency stop, which always goes through.
+     * working on, except for an emergency stop, which always goes through. [run] is Start run's
+     * list (`program`, `speed`, `accel`); nothing else carries those fields.
      */
-    suspend fun send(deviceId: String, uid: String, action: OperatorAction): OperatorSubmission {
+    suspend fun send(
+        deviceId: String,
+        uid: String,
+        action: OperatorAction,
+        sensors: Int?,
+        fast: Boolean?,
+        run: RunProgram?
+    ): OperatorSubmission {
         requireValid(deviceId)
         require(uid.isNotBlank())
         if (!NetworkConnectivityManager.isNetworkConnected()) {
@@ -226,10 +284,11 @@ object OperatorDb {
                                 existingStatus = data.child("status").value as? String,
                                 existingRequestedAtMs = (data.child("requestedAt").value as? Number)?.toLong(),
                                 exists = data.value != null,
-                                nowMs = GarbyRealtimeDb.serverNowMs()
+                                nowMs = GarbyRealtimeDb.serverNowMs(),
+                                existingAction = data.child("action").value as? String
                             )
                             if (!continuation.isActive || !replaceable) return Transaction.abort()
-                            data.value = mapOf(
+                            val payload = mutableMapOf<String, Any>(
                                 "version" to 1,
                                 "requestId" to requestId,
                                 "requestedAt" to ServerValue.TIMESTAMP,
@@ -237,6 +296,14 @@ object OperatorDb {
                                 "action" to action.wire,
                                 "status" to "pending"
                             )
+                            if (sensors != null) payload["sensors"] = sensors
+                            if (fast != null) payload["fast"] = fast
+                            if (run != null) {
+                                payload["program"] = run.wire
+                                payload["speed"] = run.speed
+                                payload["accel"] = run.accel
+                            }
+                            data.value = payload
                             return Transaction.success(data)
                         }
 
@@ -267,6 +334,62 @@ object OperatorDb {
             OperatorSubmission.Unconfirmed("Delivery was not confirmed. Check GARBY before trying again.")
         } else {
             OperatorSubmission.NotSent("Nothing was sent.")
+        }
+    }
+}
+
+/**
+ * Keep only the current scan. After ten seconds without a new usable acquisition, detach the
+ * large frame listener and watch only its timestamp. A fresh timestamp wakes it automatically.
+ * The caller owns the small publication lease so a recovered Pi can still wake a sleeping map.
+ */
+suspend fun observeMapSession(
+    frames: () -> Flow<MapFrame?>,
+    timestamps: () -> Flow<Long>,
+    nowMs: () -> Long,
+    onFrame: (MapFrame) -> Unit,
+    onSleep: () -> Unit
+) {
+    var lastAt = 0L
+    var lastSeq = -1L
+    while (true) {
+        coroutineScope {
+            val updates = Channel<MapFrame>(Channel.CONFLATED)
+            val collector = launch {
+                var observedAt = lastAt
+                var observedSeq = lastSeq
+                try {
+                    frames().collect { frame ->
+                        if (frame != null && !frame.isStale(nowMs()) &&
+                            (frame.atMs != observedAt || frame.seq != observedSeq)
+                        ) {
+                            observedAt = frame.atMs
+                            observedSeq = frame.seq
+                            updates.send(frame)
+                        }
+                    }
+                } finally {
+                    updates.close()
+                }
+            }
+            try {
+                while (true) {
+                    val frame = withTimeoutOrNull(OperatorLimits.MAP_SLEEP_AFTER_MS) {
+                        updates.receiveCatching().getOrNull()
+                    } ?: break
+                    lastAt = frame.atMs
+                    lastSeq = frame.seq
+                    onFrame(frame)
+                }
+            } finally {
+                collector.cancelAndJoin()
+                updates.cancel()
+            }
+        }
+        onSleep()
+        timestamps().first { stamp ->
+            stamp > 0L && stamp != lastAt &&
+                nowMs() - stamp in -30_000L..OperatorLimits.MAP_STALE_AFTER_MS
         }
     }
 }

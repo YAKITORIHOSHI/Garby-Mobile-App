@@ -8,8 +8,15 @@ Pi monitor's emergency stop always decide whether it moves.
 ## What it does
 
 - **Connect:** signs in anonymously with Firebase. No password or service key is in the app.
+  Android's validated internet connection is monitored across all tabs. After three seconds
+  without internet, the app closes its session, clears its local views and returns here,
+  keeping this phone's approved Firebase ID. Connect is disabled while offline. Once
+  internet returns, press Connect again.
 - **Dashboard:**
-  - **Robot:** where GARBY is (idle at base, driving to the collection point, waiting there,
+  - **Current activity:** Running, Blocked (with the reported reason), Turning or Idle, plus
+    parked, emergency-stop and fault states. Uses fresh Pi/MCU reports; disconnected or stale
+    reports show activity unavailable. Idle does not claim arrival at the station.
+  - **Robot:** where GARBY is (point A/station, driving to point B/disposal area, waiting there,
     returning, route fault), shown on a base-to-collection-point track, and whether the Pi is
     still reporting.
   - **Bin:** weight against the 4 kg dispatch threshold, and the bin sensor's distance reading.
@@ -18,7 +25,8 @@ Pi monitor's emergency stop always decide whether it moves.
   - **System:** Pi heartbeat, cloud, phone internet, Bluetooth link to the robot, LiDAR, sensor
     board, Pi temperature and power.
   - Anything older than 90 s is marked stale; nothing missing is shown as zero.
-- **Return to base:** a checklist of what must be true before sending (GARBY waiting at the
+- **Activity:** **Send back to base** is inside this tab, alongside the last completed arrival,
+  return progress and a checklist of what must be true before sending (GARBY waiting at the
   collection point, reporting, linked and scanning; cloud and phone online; no return already
   running), a confirmation with the safety points, and live progress: sent, accepted by GARBY,
   back at base, or failed with the reason in plain words.
@@ -27,26 +35,43 @@ Pi monitor's emergency stop always decide whether it moves.
   thresholds are reached. Cancel sends nothing. GARBY's own obstacle, heading and emergency
   stop checks still control motion. The latest request shows sent, accepted, rejected or
   delivery not confirmed; accepted does not mean arrival. Follow robot status, empty the bin
-  at the collection point, then use the existing return action.
-- **Bottom bar:** Home (the dashboard), Map, Controls and Activity (the return to base), with
-  an **EMERGENCY STOP** button above the tabs on every screen. The button says what the robot's
-  controllers confirmed: sent, then stopped. It travels over the internet, so it is a
+  at the collection point, then use Activity to request return.
+- **Floating glass dock:** Home (the dashboard), Map, Controls and Activity (the return to base),
+  with an **EMERGENCY STOP** button above the tabs on every screen. The page continues behind
+  it; there is no solid background strip around the glass container. Scrollable content leaves
+  space for the dock, including larger text and Android's navigation area. **EMERGENCY STOP** is
+  enabled only while both the Raspberry Pi and MCU are online and reporting, and this phone is connected to Firebase.
+  A disabled button says which connection is missing. It shows sent, then stopped only after confirmation. It travels over the internet, so it is a
   convenience and not a safety device: keep a way to stop the robot at the robot.
 - **Controls:** what the Pi monitor's Controls tab does, from the phone: Release stop, Continue
-  run, Reverse to start, obstacle sonar on/off, front and rear LiDAR read-only, and restart of
-  the Pi and both controllers. Each is offered only when the robot's controllers have confirmed
+  run, Reverse to start, obstacle sonar on/off, front, side and rear LiDAR read-only, and restart
+  of the Pi and both controllers. Each is offered only when the robot's controllers have confirmed
   the state it needs, says why when it is not, asks for confirmation where the robot may move,
   and shows the outcome of the last request. Only phones on the robot's operator list can send
-  them; the phone's ID is shown at the bottom of the tab.
+  them; the phone's ID is shown at the bottom of the tab. **Controls** and **Developer** keep
+  GARBY's original red/rose palette with distinct glass panels, bright labels and outlined buttons.
+  **Developer** is the Pi's Developer window from the phone: choose the sensors a bench test
+  obeys, run a test (Stop test ends it), nudge GARBY with the arrows (each tap drives about
+  0.6 s, then it stops by itself; no sensor checks, so watch it), and build a RunStart list
+  (steps, max speed, acceleration, Start run) or continue, reverse or discard the one saved on
+  the robot. It is available whenever the Pi's window would be, with the Pi's reason when not.
+  Sensor chips say **ON/OFF**; disabled actions show a lock and the reason. Tap a section to switch.
 - **Map:** GARBY's LiDAR scan, front at the top, with a red dot for a likely person (person-sized
   and seen moving), amber for another moving object and an orange square for an object standing
   between the hallway walls. It is live only while the tab is open, and says "stale" as soon as
-  it is not.
+  it is not. The display is at most 320 dp wide with the same 2/4/8 m ranges. After 10 s
+  without a new scan it sleeps, releases the scan and drawing data, and wakes automatically
+  when a fresh scan arrives. Leaving Map releases its scan immediately. Range controls and
+  waiting text are centered; while waiting on this tab, a small radar sweep rotates until a
+  scan arrives or the map sleeps. The sweep pauses when the tab or app leaves the foreground.
 - **Notifications:** receives GARBY push messages when a sender is configured (none is
   deployed yet).
 
 The app opens fullscreen, with Android's status and navigation bars hidden. Swipe inward
 from a screen edge to reveal the system controls temporarily.
+
+Arrival reports come from completed executor routes: outbound confirms point B/disposal area;
+return confirms point A/station. Idle alone shows location unconfirmed.
 
 ## Requirements
 
@@ -68,6 +93,13 @@ Open this folder in Android Studio and run the `app` configuration, or from a te
 ./gradlew :app:assembleRelease         # minified release APK (unsigned without the release key)
 ./gradlew :app:assembleBenchmark       # minified, signed local performance-test APK
 ```
+
+For everyday smoothness checks in Android Studio, open **Build Variants**, select
+**benchmark** for `app`, then use **Run**. The default **debug** variant includes development
+instrumentation and does not represent release performance. Benchmark keeps the same app ID
+and uses the supplied release key, or the local debug key when no release key is configured.
+Keep the existing signing key when updating an installed app. For Windows steps and a short
+phone frame-time capture, see [measuring app smoothness](docs/2026-11-17-performance-capture.md).
 
 Outputs are in `app/build/outputs/apk/`. If this checkout is on a network share, add an absolute
 `garby.buildRoot=<local folder>` to `local.properties` and outputs go there instead (see

@@ -1,0 +1,56 @@
+{
+  "date": "2026-11-17",
+  "commands": [
+    {
+      "command": "python3 -B tools/static_quality_check.py",
+      "exitCode": 0,
+      "log": "static-quality.log"
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0,
+      "log": "diff-check.log"
+    },
+    {
+      "command": "Production source/gate/layout/config comparison and delimiter review",
+      "exitCode": 0,
+      "log": "scope-checks.log"
+    },
+    {
+      "command": "Negative checker run against the saved old navigation/monitor/dock sources",
+      "exitCode": 0,
+      "log": "negative-source-check.log"
+    },
+    {
+      "command": "Red/rose foreground contrast against maximum white glass sheen",
+      "exitCode": 0,
+      "log": "contrast.json"
+    },
+    {
+      "command": "env GRADLE_USER_HOME=/tmp/garby-mobile-gradle-20261117 bash gradlew --offline --no-daemon :app:compileDebugKotlin :app:testDebugUnitTest :app:lintDebug",
+      "exitCode": 1,
+      "status": "blocked_before_compilation",
+      "log": "gradle.log",
+      "reason": "No cached Gradle distribution; network sockets denied with Operation not permitted."
+    }
+  ],
+  "jvmTestsAdded": [
+    "three consumers share one clock and stop/restart it correctly",
+    "sixty map/clock updates suppress unchanged dock state",
+    "Pi stale timeout, confirmed stop and offline transition",
+    "pending-stop expiry without a database callback"
+  ],
+  "jvmTestsExecuted": false,
+  "androidLayoutTested": false,
+  "phoneFrameTimesMeasured": false,
+  "designReference": "SVG layout reference rendered locally; not an Android runtime screenshot",
+  "windowsConfigurationPreserved": true,
+  "brandSpecificCodeAdded": false,
+  "apkBuilt": false,
+  "published": false,
+  "mcuUploadRequirement": "None",
+  "piDeploymentRequirement": "None for this app-only change",
+  "previousDeploymentRequirement": "Earlier ARRIVAL-20261117 Executor/Pi requirement remains separate; installed versions unknown",
+  "hardwareActionsPerformed": false,
+  "liveDatabaseModified": false
+}

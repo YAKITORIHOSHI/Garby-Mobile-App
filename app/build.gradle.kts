@@ -19,8 +19,8 @@ android {
         // Android 17 target-only changes (local network permission, certificate transparency,
         // background audio, widgets, RFCOMM reads) do not touch this Firebase-only app.
         targetSdk = 37
-        versionCode = 7
-        versionName = "Most Latest · Phone Control"
+        versionCode = 8
+        versionName = "Most Latest · Developer Controls"
     }
 
     // The app's persistent release key, supplied from outside the repository: the CI workflow

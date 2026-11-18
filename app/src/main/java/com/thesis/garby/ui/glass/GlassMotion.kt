@@ -20,7 +20,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.thesis.garby.performance.LocalPerformanceProfile
@@ -85,17 +86,19 @@ fun RevealWhenLoaded(
     content: @Composable () -> Unit
 ) {
     val reducedEffects = LocalPerformanceProfile.current.reducedEffects
+    if (reducedEffects) {
+        Box(modifier) {
+            if (loaded) content() else skeleton()
+        }
+        return
+    }
     AnimatedContent(
         targetState = loaded,
         modifier = modifier,
         transitionSpec = {
-            if (reducedEffects) {
-                EnterTransition.None togetherWith ExitTransition.None
-            } else {
-                (fadeIn(tween(260)) + slideInVertically(
-                    spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)
-                ) { height -> height / 10 }) togetherWith fadeOut(tween(140))
-            }
+            (fadeIn(tween(260)) + slideInVertically(
+                spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)
+            ) { height -> height / 10 }) togetherWith fadeOut(tween(140))
         },
         label = "reveal"
     ) { ready ->
@@ -160,11 +163,10 @@ fun SkeletonCard(label: String, modifier: Modifier = Modifier, lines: Int = 3) {
     }
 }
 
-/** GARBY's own loader: a LiDAR sweep going round a scope. */
+/** Active progress on every profile; the caller pauses it when the map is not resumed. */
 @Composable
-fun RadarLoader(label: String, modifier: Modifier = Modifier, size: Dp = 84.dp) {
-    val reducedEffects = LocalPerformanceProfile.current.reducedEffects
-    val angle = if (reducedEffects) null else rememberInfiniteTransition(label = "radar").animateFloat(
+fun RadarLoader(label: String, modifier: Modifier = Modifier, size: Dp = 84.dp, animate: Boolean = true) {
+    val angle = if (!animate) null else rememberInfiniteTransition(label = "radar").animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(tween(1800, easing = LinearEasing), RepeatMode.Restart),
@@ -174,33 +176,35 @@ fun RadarLoader(label: String, modifier: Modifier = Modifier, size: Dp = 84.dp) 
         modifier = modifier.semantics { contentDescription = label },
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Canvas(Modifier.size(size)) {
+        Spacer(Modifier.size(size).drawWithCache {
             val radius = this.size.minDimension / 2f
             val stroke = 1.5.dp.toPx()
-            drawCircle(GarbyColors.GlassStrokeFaint, radius)
-            listOf(1f, 0.66f, 0.33f).forEach { ring ->
-                drawCircle(GarbyColors.GlassStroke, radius * ring - stroke, style = Stroke(stroke))
+            val ringRadii = floatArrayOf(radius - stroke, radius * 0.66f - stroke, radius * 0.33f - stroke)
+            val ringStroke = Stroke(stroke)
+            val sweep = Brush.sweepGradient(
+                0f to Color.Transparent,
+                0.78f to Color.Transparent,
+                1f to GarbyColors.EmberGlow.copy(alpha = 0.75f)
+            )
+            val sweepSize = Size(radius * 2f, radius * 2f)
+            val sweepCenter = Offset(this.size.width / 2f, this.size.height / 2f)
+            val sweepEnd = Offset(sweepCenter.x + radius - stroke, sweepCenter.y)
+            val sweepStroke = 2.dp.toPx()
+            val dotRadius = 3.dp.toPx()
+            onDrawBehind {
+                drawCircle(GarbyColors.GlassStrokeFaint, radius)
+                ringRadii.forEach { drawCircle(GarbyColors.GlassStroke, it, style = ringStroke) }
+                // Reading phase here invalidates only this small drawing, not the page/layout.
+                rotate(angle?.value ?: 300f) {
+                    drawArc(sweep, 0f, 360f, useCenter = true, size = sweepSize)
+                    drawLine(GarbyColors.EmberGlow, center, sweepEnd,
+                        strokeWidth = sweepStroke, cap = StrokeCap.Round)
+                }
+                drawCircle(GarbyColors.TextPrimary, dotRadius)
             }
-            rotate(angle?.value ?: 300f) {
-                drawArc(
-                    brush = Brush.sweepGradient(
-                        0f to Color.Transparent,
-                        0.78f to Color.Transparent,
-                        1f to GarbyColors.EmberGlow.copy(alpha = 0.75f)
-                    ),
-                    startAngle = 0f,
-                    sweepAngle = 360f,
-                    useCenter = true,
-                    size = Size(radius * 2f, radius * 2f)
-                )
-                drawLine(
-                    GarbyColors.EmberGlow, center, Offset(center.x + radius - stroke, center.y),
-                    strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round
-                )
-            }
-            drawCircle(GarbyColors.TextPrimary, 3.dp.toPx())
-        }
+        })
         Spacer(Modifier.height(10.dp))
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = GarbyColors.TextMuted)
+        Text(label, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodyMedium,
+            color = GarbyColors.TextMuted, textAlign = TextAlign.Center)
     }
 }

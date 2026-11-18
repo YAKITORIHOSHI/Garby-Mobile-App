@@ -1,0 +1,6 @@
+PASS: Kotlin source delimiters balanced (not a compiler result).
+PASS: Command send gate, confirmation bodies and action bindings retained.
+PASS: No full operator-state collection in navigation; distinct stop-state collection scoped to dock.
+PASS: Monitoring consumers use one shared clock; auth/network monitoring uses callbacks.
+PASS: Red/rose palette uses original GarbyColors; no cyan/violet section colors.
+PASS: Windows folder, SDK and Gradle output configuration unchanged.

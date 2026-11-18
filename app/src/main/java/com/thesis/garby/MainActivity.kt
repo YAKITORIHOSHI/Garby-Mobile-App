@@ -12,8 +12,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -21,19 +19,24 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -50,14 +53,12 @@ import com.thesis.garby.firestore.AuthViewModel
 import com.thesis.garby.notifications.GarbyNotificationHelper
 import com.thesis.garby.performance.LocalPerformanceProfile
 import com.thesis.garby.realtime.OperatorAction
-import com.thesis.garby.realtime.OperatorCommandStatus
-import com.thesis.garby.realtime.isFresh
 import com.thesis.garby.ui.GarbyBottomBar
 import com.thesis.garby.ui.GarbyTab
+import com.thesis.garby.ui.LocalFloatingDockInset
 import com.thesis.garby.ui.glass.tabEnter
 import com.thesis.garby.ui.glass.tabExit
 import com.thesis.garby.ui.hideSystemBars
-import com.thesis.garby.ui.stopButtonState
 import com.thesis.garby.ui.theme.GarbyTheme
 
 class MainActivity : ComponentActivity() {
@@ -124,10 +125,6 @@ class MainActivity : ComponentActivity() {
 fun GarbyApp(notificationOpens: Int) {
     val reducedEffects = LocalPerformanceProfile.current.reducedEffects
     val authViewModel: AuthViewModel = viewModel()
-    // Activity-scoped: a return request stays tracked while the operator moves between screens.
-    val returnViewModel: ReturnViewModel = viewModel()
-    // Activity-scoped too: the stop button under every tab and the Controls tab share it.
-    val operatorViewModel: OperatorViewModel = viewModel()
     val authState by authViewModel.authState.collectAsStateWithLifecycle()
     val authError by authViewModel.signInError.collectAsStateWithLifecycle()
     val signingIn by authViewModel.isSigningIn.collectAsStateWithLifecycle()
@@ -138,34 +135,63 @@ fun GarbyApp(notificationOpens: Int) {
         }
     }
 
+    val authenticated = authState is AuthState.Authenticated
+    if (reducedEffects) {
+        // A transition with None still creates AnimatedContent's measurement/subcomposition
+        // machinery. The light profile renders a single screen directly.
+        Box(Modifier.fillMaxSize()) {
+            GarbyAppContent(authenticated, signingIn, authError, authViewModel)
+        }
+        return
+    }
+
     AnimatedContent(
-        targetState = authState is AuthState.Authenticated,
+        targetState = authenticated,
         transitionSpec = {
-            if (reducedEffects) EnterTransition.None togetherWith ExitTransition.None
             // Signing in: the app grows into place while the start screen lets go.
-            else (fadeIn(tween(320)) + scaleIn(tween(420), initialScale = 0.94f)) togetherWith
+            (fadeIn(tween(320)) + scaleIn(tween(420), initialScale = 0.94f)) togetherWith
                 (fadeOut(tween(200)) + scaleOut(tween(260), targetScale = 1.04f))
         },
         modifier = Modifier.fillMaxSize(),
         label = "authenticated"
-    ) { authenticated ->
-        if (authenticated) {
-            GarbyNavHost(
-                returnViewModel = returnViewModel,
-                operatorViewModel = operatorViewModel,
-                onSignOut = {
-                    returnViewModel.onSignedOut()
-                    operatorViewModel.onSignedOut()
-                    authViewModel.signOut()
-                }
-            )
-        } else {
-            StartScreen(
-                isAuthenticating = signingIn,
-                errorMessage = authError,
-                onConnect = authViewModel::signIn
-            )
+    ) { connected ->
+        GarbyAppContent(connected, signingIn, authError, authViewModel)
+    }
+}
+
+@Composable
+private fun GarbyAppContent(
+    authenticated: Boolean,
+    signingIn: Boolean,
+    authError: String?,
+    authViewModel: AuthViewModel
+) {
+    if (authenticated) {
+        // Activity-scoped across tabs, but created only after sign-in. The Connect screen
+        // needs neither monitoring state machines nor their coroutine subscriptions.
+        val returnViewModel: ReturnViewModel = viewModel()
+        val operatorViewModel: OperatorViewModel = viewModel()
+        DisposableEffect(authViewModel, returnViewModel, operatorViewModel) {
+            val cleanup: () -> Unit = {
+                returnViewModel.onSignedOut()
+                operatorViewModel.onSignedOut()
+            }
+            authViewModel.addSessionEndListener(cleanup)
+            onDispose { authViewModel.removeSessionEndListener(cleanup) }
         }
+        GarbyNavHost(
+            returnViewModel = returnViewModel,
+            operatorViewModel = operatorViewModel,
+            onSignOut = authViewModel::signOut
+        )
+    } else {
+        val internetAvailable by authViewModel.internetAvailable.collectAsStateWithLifecycle()
+        StartScreen(
+            isAuthenticating = signingIn,
+            errorMessage = authError,
+            onConnect = authViewModel::signIn,
+            internetAvailable = internetAvailable
+        )
     }
 }
 
@@ -187,7 +213,6 @@ private fun GarbyNavHost(
             operatorViewModel.observeWhileVisible()
         }
     }
-    val operator by operatorViewModel.uiState.collectAsStateWithLifecycle()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val selected = GarbyTab.fromRoute(backStackEntry?.destination?.route)
 
@@ -199,18 +224,15 @@ private fun GarbyNavHost(
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                // The bar below owns the bottom inset; the screens must not add it again.
-                .consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
-        ) {
+    var dockHeightPx by remember { mutableIntStateOf(0) }
+    val dockInset = with(LocalDensity.current) { dockHeightPx.toDp() }
+    CompositionLocalProvider(LocalFloatingDockInset provides dockInset) {
+        Box(Modifier.fillMaxSize()) {
             NavHost(
                 navController = navController,
                 startDestination = GarbyTab.Home.route,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize()
+                    .consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
                 enterTransition = {
                     tabEnter(tabIndex(initialState.destination.route), tabIndex(targetState.destination.route), reducedEffects)
                 },
@@ -225,11 +247,8 @@ private fun GarbyNavHost(
                 }
             ) {
                 composable(GarbyTab.Home.route) {
-                    MainDashboard(
-                        returnViewModel = returnViewModel,
-                        onOpenReturn = { open(GarbyTab.Activity) },
-                        onSignOut = onSignOut
-                    )
+                    MainDashboard(returnViewModel = returnViewModel,
+                        operatorViewModel = operatorViewModel, onSignOut = onSignOut)
                 }
                 composable(GarbyTab.Map.route) { MapScreen(viewModel = operatorViewModel) }
                 composable(GarbyTab.Controls.route) { ControlsScreen(viewModel = operatorViewModel) }
@@ -237,24 +256,29 @@ private fun GarbyNavHost(
                     ReturnScreen(viewModel = returnViewModel, onBack = { open(GarbyTab.Home) })
                 }
             }
+            FloatingOperatorDock(
+                viewModel = operatorViewModel,
+                selected = selected,
+                onSelect = ::open,
+                modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { size ->
+                    if (dockHeightPx != size.height) dockHeightPx = size.height
+                }
+            )
         }
-        val stopCommand = operator.command?.takeIf { it.action == OperatorAction.Estop.wire }
-        GarbyBottomBar(
-            selected = selected,
-            onSelect = ::open,
-            stopState = stopButtonState(
-                emergencyStopped = operator.status?.emergencyStopped,
-                statusFresh = operator.status.isFresh(operator.nowMs),
-                sendingStop = operator.sending == OperatorAction.Estop,
-                stopRequestOpen = stopCommand != null && (
-                    stopCommand.status == OperatorCommandStatus.Pending ||
-                        stopCommand.status == OperatorCommandStatus.Claimed
-                    ) && operator.nowMs - stopCommand.requestedAtMs < 30_000L,
-                online = operator.online
-            ),
-            onStop = { operatorViewModel.send(OperatorAction.Estop) }
-        )
     }
+}
+
+/** Clock and map updates stay outside navigation; only a changed stop state redraws this dock. */
+@Composable
+private fun FloatingOperatorDock(
+    viewModel: OperatorViewModel,
+    selected: GarbyTab,
+    onSelect: (GarbyTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val stopState by viewModel.stopState.collectAsStateWithLifecycle()
+    GarbyBottomBar(selected = selected, onSelect = onSelect, stopState = stopState,
+        onStop = { viewModel.send(OperatorAction.Estop) }, modifier = modifier)
 }
 
 private fun tabIndex(route: String?): Int = GarbyTab.fromRoute(route).ordinal

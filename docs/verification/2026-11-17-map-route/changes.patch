@@ -1,0 +1,1295 @@
+--- a/FIREBASE_CONFIGURATION.md
++++ b/FIREBASE_CONFIGURATION.md
+@@ -118,3 +118,19 @@
+ These rules were prepared and JSON-checked here. They were **not deployed or tested against the
+ live database**. Manual disposal and the return request keep their existing rules, which accept
+ any signed-in account.
++
++
++## Route endpoint reports — 2026-11-17
++
++The Pi writes these fields under `devices/garby-bin-01/status`; the app only reads them:
++
++| Field | Meaning |
++| --- | --- |
++| `location` | `POINT_B` after completed outbound, `POINT_A` after explicit completed return, `IN_TRANSIT` during motion, otherwise `UNKNOWN` when unconfirmed |
++| `isAtStation` | True only for current `POINT_A`; generic IDLE is insufficient |
++| `locationUpdatedAt` | Epoch milliseconds when the current location report changed |
++| `lastArrival` | `{point, name, confirmedAt, source}` for the last completed route endpoint; retained during travel/unknown state |
++
++The existing read permission for the status subtree covers these fields. No new client write
++permission is needed. Neither these fields nor a return-request acknowledgement grant motion.
++The phone stop is enabled only with fresh Pi/MCU status and the phone/cloud connection up.
+--- a/PATCH_NOTES.md
++++ b/PATCH_NOTES.md
+@@ -1,4 +1,22 @@
+ # GARBY Mobile App - Patch Notes
++
++## Compact map, Activity controls and route arrivals — 2026-11-17
++
++- Map display capped at 320 dp; 2/4/8 m ranges and scan detail retained. Scan geometry is cached.
++  After 10 s without a new usable scan, the full frame listener detaches, decoded scan and
++  drawing data are released, and the loader stops. A scalar timestamp listener and the small
++  publication lease allow automatic wake on fresh data. Leaving Map clears the scan immediately.
++- Removed the floating Home return dock. Send back to base is an inline card in Activity,
++  with the existing confirmation, readiness checks and correlated return progress.
++- Phone emergency stop requires an online phone/cloud, a fresh Pi mirror, BLE connection and
++  fresh MCU support. It can still preempt a pending action once those conditions hold.
++- Displays completed outbound arrival at point B/disposal area and return arrival at point A/
++  station from Pi status. Generic IDLE no longer claims station arrival. Activity retains the
++  last completed arrival independently of current travel/unknown status.
++- Windows local.properties, SDK/build paths, settings and the project folder are unchanged.
++  Source/static checks are recorded in docs/verification/2026-11-17-map-route/. Gradle unit
++  tests, Kotlin compilation and lint could not start: no cached Gradle distribution and this
++  host denies network sockets. No APK was built or published for these changes.
+ 
+ ## Phone control and the LiDAR map — 2026-11-15
+ 
+--- a/README.md
++++ b/README.md
+@@ -9,7 +9,7 @@
+ 
+ - **Connect:** signs in anonymously with Firebase. No password or service key is in the app.
+ - **Dashboard:**
+-  - **Robot:** where GARBY is (idle at base, driving to the collection point, waiting there,
++  - **Robot:** where GARBY is (point A/station, driving to point B/disposal area, waiting there,
+     returning, route fault), shown on a base-to-collection-point track, and whether the Pi is
+     still reporting.
+   - **Bin:** weight against the 4 kg dispatch threshold, and the bin sensor's distance reading.
+@@ -18,7 +18,8 @@
+   - **System:** Pi heartbeat, cloud, phone internet, Bluetooth link to the robot, LiDAR, sensor
+     board, Pi temperature and power.
+   - Anything older than 90 s is marked stale; nothing missing is shown as zero.
+-- **Return to base:** a checklist of what must be true before sending (GARBY waiting at the
++- **Activity:** **Send back to base** is inside this tab, alongside the last completed arrival,
++  return progress and a checklist of what must be true before sending (GARBY waiting at the
+   collection point, reporting, linked and scanning; cloud and phone online; no return already
+   running), a confirmation with the safety points, and live progress: sent, accepted by GARBY,
+   back at base, or failed with the reason in plain words.
+@@ -27,10 +28,11 @@
+   thresholds are reached. Cancel sends nothing. GARBY's own obstacle, heading and emergency
+   stop checks still control motion. The latest request shows sent, accepted, rejected or
+   delivery not confirmed; accepted does not mean arrival. Follow robot status, empty the bin
+-  at the collection point, then use the existing return action.
++  at the collection point, then use Activity to request return.
+ - **Bottom bar:** Home (the dashboard), Map, Controls and Activity (the return to base), with
+-  an **EMERGENCY STOP** button above the tabs on every screen. The button says what the robot's
+-  controllers confirmed: sent, then stopped. It travels over the internet, so it is a
++  an **EMERGENCY STOP** button above the tabs on every screen. It is enabled only while both
++  the Raspberry Pi and MCU are online and reporting, and this phone is connected to Firebase.
++  A disabled button says which connection is missing. It shows sent, then stopped only after confirmation. It travels over the internet, so it is a
+   convenience and not a safety device: keep a way to stop the robot at the robot.
+ - **Controls:** what the Pi monitor's Controls tab does, from the phone: Release stop, Continue
+   run, Reverse to start, obstacle sonar on/off, front and rear LiDAR read-only, and restart of
+@@ -41,12 +43,17 @@
+ - **Map:** GARBY's LiDAR scan, front at the top, with a red dot for a likely person (person-sized
+   and seen moving), amber for another moving object and an orange square for an object standing
+   between the hallway walls. It is live only while the tab is open, and says "stale" as soon as
+-  it is not.
++  it is not. The display is at most 320 dp wide with the same 2/4/8 m ranges. After 10 s
++  without a new scan it sleeps, releases the scan and drawing data, and wakes automatically
++  when a fresh scan arrives. Leaving Map releases its scan immediately.
+ - **Notifications:** receives GARBY push messages when a sender is configured (none is
+   deployed yet).
+ 
+ The app opens fullscreen, with Android's status and navigation bars hidden. Swipe inward
+ from a screen edge to reveal the system controls temporarily.
++
++Arrival reports come from completed executor routes: outbound confirms point B/disposal area;
++return confirms point A/station. Idle alone shows location unconfirmed.
+ 
+ ## Requirements
+ 
+--- a/SYSTEM_ARCHITECTURE.md
++++ b/SYSTEM_ARCHITECTURE.md
+@@ -4,6 +4,33 @@
+ This Android repository describes its Firebase integration here and in
+ [FIREBASE_CONFIGURATION.md](FIREBASE_CONFIGURATION.md). Live Firebase and hardware remain
+ external acceptance items.
++
++## Map, controls and arrivals — 2026-11-17
++
++`MainDashboard` has no return dock. `ReturnScreen` is the Activity tab and owns an inline
++Send back to base card, its confirmation, readiness checks and progress.
++
++`MapScreen` limits the drawing to 320 dp without changing the 2/4/8 m ranges or the 360
++returns. `drawWithCache` retains geometry only for the current frame/range/display size.
++`observeMapSession` waits ten seconds for a different, valid, fresh frame; duplicates,
++malformed and stale data cannot extend that wait. It then cancels the full scan collector,
++clears the displayed `MapFrame`, removes the drawing/loader, and listens only to `map/frame/at`.
++A new fresh timestamp reattaches the full listener. The 20 s publication lease remains active
++while Map is visible so a recovering Pi can send the next scan. Screen/lifecycle cancellation
++releases both listeners and the decoded frame. A listener error leaves a static retry message.
++
++The phone stop needs a Firebase connection, phone internet and a Pi operator mirror no older
++than 30 s with `connected` and `supported` true. The Pi derives `supported` from a fresh executor
++operator report (7.5 s locally). The displayed button and the send gate use these conditions;
++unknown/stale state disables it. Once online, stop can preempt a pending action. The Pi/MCU stop
++latch and their acceptance of stop commands retain their existing behavior.
++
++`DeviceStatus` decodes `location` (POINT_A/POINT_B/IN_TRANSIT/UNKNOWN), `locationUpdatedAt`, and
++`lastArrival {point, confirmedAt}`. A completed outbound confirms point B/disposal area. The
++executor's separate RETURN COMPLETE report confirms point A/station and is replayed with IDLE
++after reconnect. Generic IDLE does not prove arrival. The last arrival is historical while
++current location can become in transit or unknown. This is route-completion telemetry from
++open-loop travel, not an independently measured physical position.
+ 
+ ## Responsibilities
+ 
+@@ -24,7 +51,7 @@
+ ## What the dashboard shows
+ 
+ - **Robot state** from `devices/<id>/status/robotState`, as the Pi maps the executor's lines:
+-  IDLE (at base), OUTBOUND (driving to the collection point), AT_DESTINATION (waiting there),
++  IDLE (stationary, location confirmed separately), OUTBOUND (driving to the collection point), AT_DESTINATION (waiting there),
+   RETURNING, FAULT (`[ROUTE FAULT]` or `[RETURN REJECTED]`), UNKNOWN (controllers restarting or
+   BLE down). A route track shows base, collection point and the robot's position by state.
+ - **Presence** from the Pi heartbeat (`lastSeen`, every 30 s): live up to 90 s, then the state is
+--- a/app/src/main/java/com/thesis/garby/ControlsScreen.kt
++++ b/app/src/main/java/com/thesis/garby/ControlsScreen.kt
+@@ -517,7 +517,8 @@
+     onRequest: (OperatorAction) -> Unit,
+     primary: Boolean
+ ) {
+-    val blocked = operatorBlockReason(action, state.status, state.nowMs, state.online, state.sending != null)
++    val blocked = operatorBlockReason(action, state.status, state.nowMs, state.online, state.sending != null,
++        cloudConnected = state.cloudConnected)
+     Column {
+         GlassButton(
+             text = action.label,
+--- a/app/src/main/java/com/thesis/garby/MainActivity.kt
++++ b/app/src/main/java/com/thesis/garby/MainActivity.kt
+@@ -227,7 +227,6 @@
+                 composable(GarbyTab.Home.route) {
+                     MainDashboard(
+                         returnViewModel = returnViewModel,
+-                        onOpenReturn = { open(GarbyTab.Activity) },
+                         onSignOut = onSignOut
+                     )
+                 }
+@@ -250,7 +249,9 @@
+                     stopCommand.status == OperatorCommandStatus.Pending ||
+                         stopCommand.status == OperatorCommandStatus.Claimed
+                     ) && operator.nowMs - stopCommand.requestedAtMs < 30_000L,
+-                online = operator.online
++                online = operator.online,
++                controllersOnline = operator.status?.let { it.connected && it.supported } == true,
++                cloudConnected = operator.cloudConnected
+             ),
+             onStop = { operatorViewModel.send(OperatorAction.Estop) }
+         )
+--- a/app/src/main/java/com/thesis/garby/MainDashboard.kt
++++ b/app/src/main/java/com/thesis/garby/MainDashboard.kt
+@@ -112,7 +112,6 @@
+ import com.thesis.garby.ui.glass.GlassButton
+ import com.thesis.garby.ui.glass.GlassButtonStyle
+ import com.thesis.garby.ui.glass.GlassDialog
+-import com.thesis.garby.ui.glass.GlassDock
+ import com.thesis.garby.ui.glass.GlassIconButton
+ import com.thesis.garby.ui.glass.GlassPanel
+ import com.thesis.garby.ui.glass.GlassScaffold
+@@ -139,7 +138,6 @@
+ @Composable
+ fun MainDashboard(
+     returnViewModel: ReturnViewModel,
+-    onOpenReturn: () -> Unit,
+     onSignOut: () -> Unit,
+     deviceViewModel: DeviceViewModel = viewModel()
+ ) {
+@@ -156,7 +154,6 @@
+     DashboardContent(
+         state = state,
+         summary = summary,
+-        onOpenReturn = onOpenReturn,
+         onSignOut = { confirmSignOut = true },
+         onManualDisposal = deviceViewModel::requestDisposal,
+         onDismissDisposalNotice = deviceViewModel::clearDisposalNotice
+@@ -177,7 +174,6 @@
+ fun DashboardContent(
+     state: DeviceUiState,
+     summary: ReturnSummary,
+-    onOpenReturn: () -> Unit,
+     onSignOut: () -> Unit,
+     onManualDisposal: () -> Unit = {},
+     onDismissDisposalNotice: () -> Unit = {}
+@@ -205,9 +201,6 @@
+                     )
+                 }
+             )
+-        },
+-        bottomBar = {
+-            ReturnDock(summary = summary, robotState = robotState, onOpenReturn = onOpenReturn)
+         }
+     ) { padding ->
+         val layoutDirection = LocalLayoutDirection.current
+@@ -407,7 +400,7 @@
+     }
+     val status = device.status
+     val presence = state.presence
+-    val ui = robotStateUi(status?.robotState, status?.isReadyToReturn)
++    val ui = robotStateUi(status?.robotState, status?.isReadyToReturn, status?.location)
+     val live = presence == RobotPresence.Live && state.cloudConnected
+     val accent = if (presence == RobotPresence.NeverSeen) GarbyColors.Neutral else ui.color
+ 
+@@ -525,59 +518,6 @@
+             style = MaterialTheme.typography.bodySmall,
+             color = GarbyColors.TextMuted
+         )
+-    }
+-}
+-
+-@Composable
+-private fun ReturnDock(summary: ReturnSummary, robotState: RobotState?, onOpenReturn: () -> Unit) {
+-    val progress = summary.progress
+-    GlassDock {
+-        when {
+-            progress?.inFlight == true -> {
+-                val stage = returnStageUi(progress.stage)
+-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp)) {
+-                    StatusDot(stage.color)
+-                    Spacer(Modifier.width(8.dp))
+-                    Text(
+-                        text = if (progress.stage == ReturnStage.Returning) {
+-                            "GARBY accepted the return and is driving back."
+-                        } else {
+-                            "Return sent. Waiting for GARBY to accept it."
+-                        },
+-                        style = MaterialTheme.typography.bodySmall,
+-                        color = GarbyColors.TextSecondary
+-                    )
+-                }
+-                GlassButton(
+-                    text = "Track return",
+-                    onClick = onOpenReturn,
+-                    style = GlassButtonStyle.Secondary,
+-                    icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
+-                    modifier = Modifier.fillMaxWidth()
+-                )
+-            }
+-            summary.canSend -> {
+-                Text(
+-                    text = "GARBY is waiting at the collection point.",
+-                    style = MaterialTheme.typography.bodySmall,
+-                    color = GarbyColors.TextSecondary,
+-                    modifier = Modifier.padding(horizontal = 6.dp)
+-                )
+-                GlassButton(
+-                    text = "Send back to base",
+-                    onClick = onOpenReturn,
+-                    icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
+-                    modifier = Modifier.fillMaxWidth()
+-                )
+-            }
+-            else -> GlassButton(
+-                text = if (robotState == RobotState.AtDestination) "Return to base (checks pending)" else "Return to base",
+-                onClick = onOpenReturn,
+-                style = GlassButtonStyle.Secondary,
+-                icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
+-                modifier = Modifier.fillMaxWidth()
+-            )
+-        }
+     }
+ }
+ 
+@@ -1036,7 +976,6 @@
+                 ),
+                 canSend = true
+             ),
+-            onOpenReturn = {},
+             onSignOut = {}
+         )
+     }
+@@ -1049,7 +988,6 @@
+         DashboardContent(
+             state = previewDeviceState(RobotState.Outbound),
+             summary = ReturnSummary(),
+-            onOpenReturn = {},
+             onSignOut = {}
+         )
+     }
+--- a/app/src/main/java/com/thesis/garby/MapScreen.kt
++++ b/app/src/main/java/com/thesis/garby/MapScreen.kt
+@@ -1,6 +1,5 @@
+ package com.thesis.garby
+ 
+-import androidx.compose.foundation.Canvas
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.clickable
+ import androidx.compose.foundation.layout.Arrangement
+@@ -15,6 +14,7 @@
+ import androidx.compose.foundation.layout.padding
+ import androidx.compose.foundation.layout.size
+ import androidx.compose.foundation.layout.width
++import androidx.compose.foundation.layout.widthIn
+ import androidx.compose.foundation.rememberScrollState
+ import androidx.compose.foundation.shape.CircleShape
+ import androidx.compose.foundation.shape.RoundedCornerShape
+@@ -30,12 +30,13 @@
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.draw.clip
+-import androidx.compose.ui.geometry.CornerRadius
++import androidx.compose.ui.draw.drawWithCache
+ import androidx.compose.ui.geometry.Offset
+ import androidx.compose.ui.geometry.Size
+ import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.graphics.Path
+ import androidx.compose.ui.graphics.PathEffect
++import androidx.compose.ui.graphics.PointMode
+ import androidx.compose.ui.graphics.StrokeCap
+ import androidx.compose.ui.graphics.drawscope.DrawScope
+ import androidx.compose.ui.graphics.drawscope.Stroke
+@@ -68,6 +69,7 @@
+ private val MovingAmber = Color(0xFFFFB020)
+ private val ObjectOrange = Color(0xFFFF8A3D)
+ private val RANGES_M = listOf(2, 4, 8)
++private val MapDisplaySize = 320.dp
+ 
+ /**
+  * The LiDAR map, as the Pi monitor draws it: GARBY in the middle, front at the top. While this
+@@ -86,8 +88,10 @@
+     val piReporting = state.status.isFresh(state.nowMs)
+     val (subtitle, subtitleColor) = when {
+         !state.online -> "This phone is offline" to GarbyColors.Warning
++        state.mapRefused -> "Not on GARBY's operator list" to GarbyColors.Warning
++        state.mapError != null -> state.mapError.orEmpty() to GarbyColors.Warning
++        state.mapSleeping -> "Sleeping · no new scan for 10 seconds" to GarbyColors.TextMuted
+         frame != null && !stale -> "Live · ${"%.1f".format((state.nowMs - frame.atMs + frame.ageMs).coerceAtLeast(0L) / 1000f)} s old" to GarbyColors.Ok
+-        state.mapRefused -> "Not on GARBY's operator list" to GarbyColors.Warning
+         frame != null -> "Stale: last scan ${((state.nowMs - frame.atMs) / 1000L).coerceAtLeast(0L)} s ago" to GarbyColors.Warning
+         !piReporting && state.statusLoaded -> "GARBY's Pi is not reporting" to GarbyColors.Warning
+         else -> "Waiting for the first scan" to GarbyColors.TextMuted
+@@ -106,9 +110,9 @@
+         ) {
+             GlassPanel(modifier = Modifier.widthCap().fillMaxWidth()) {
+                 RevealWhenLoaded(
+-                    loaded = frame != null,
++                    loaded = frame != null || state.mapSleeping,
+                     skeleton = {
+-                        Box(Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
++                        Box(Modifier.widthIn(max = MapDisplaySize).fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
+                             RadarLoader(
+                                 when {
+                                     state.mapRefused -> "Not on GARBY's operator list: this phone's ID is on Controls"
+@@ -119,7 +123,23 @@
+                         }
+                     }
+                 ) {
+-                    if (frame != null) RadarView(frame, RANGES_M[rangeIndex], stale)
++                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
++                        if (frame != null) RadarView(frame, RANGES_M[rangeIndex], stale)
++                        else if (state.mapSleeping) {
++                            Box(
++                                Modifier.widthIn(max = MapDisplaySize).fillMaxWidth().aspectRatio(1f),
++                                contentAlignment = Alignment.Center
++                            ) {
++                                Text(
++                                    if (state.mapError != null) "Map unavailable\nReopen this tab to retry"
++                                    else "Map sleeping\nWaiting for a new scan",
++                                    style = MaterialTheme.typography.bodyLarge,
++                                    color = GarbyColors.TextMuted,
++                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
++                                )
++                            }
++                        }
++                    }
+                 }
+                 Spacer(Modifier.height(12.dp))
+                 Row(
+@@ -207,77 +227,84 @@
+ @Composable
+ private fun RadarView(frame: MapFrame, rangeM: Int, stale: Boolean) {
+     val summary = markerSummary(frame.people, frame.movers, frame.objects) ?: "nothing marked"
+-    Canvas(
++    Box(
+         Modifier
++            .widthIn(max = MapDisplaySize)
+             .fillMaxWidth()
+             .aspectRatio(1f)
+             .semantics {
+                 contentDescription = "LiDAR map, $rangeM metre range, $summary" + if (stale) ", stale" else ""
+             }
+-    ) {
+-        val radius = size.minDimension / 2f - 6.dp.toPx()
+-        val pxPerCm = radius / (rangeM * 100f)
+-        val fade = if (stale) 0.35f else 1f
+-        drawCircle(Color(0xFF07130C), radius, center)
+-        val dash = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 6.dp.toPx()))
+-        for (metre in 1..rangeM) {
+-            if (rangeM > 4 && metre % 2 == 1) continue
+-            drawCircle(
+-                RadarRing, metre * 100f * pxPerCm, center,
+-                style = Stroke(1.dp.toPx(), pathEffect = if (metre == rangeM) null else dash)
+-            )
+-        }
+-        drawLine(RadarRing, Offset(center.x, center.y - radius), Offset(center.x, center.y + radius), 1.dp.toPx())
+-        drawLine(RadarRing, Offset(center.x - radius, center.y), Offset(center.x + radius, center.y), 1.dp.toPx())
+-        val limit = rangeM * 100
+-        val dot = 2.2.dp.toPx()
+-        for (degree in 0 until 360) {
+-            val cm = frame.distancesCm[degree]
+-            if (cm <= 0 || cm > limit) continue
+-            val (forward, left) = mapPointCm(degree, cm)
+-            drawCircle(RadarPoint.copy(alpha = fade), dot, toCanvas(forward, left, pxPerCm))
+-        }
+-        // GARBY: a small arrow pointing forward (up).
+-        val arrowLength = 11.dp.toPx()
+-        val arrowHalfWidth = 6.5.dp.toPx()
+-        val arrowIndent = 2.5.dp.toPx()
+-        val arrowPath = Path().apply {
+-            moveTo(center.x, center.y - arrowLength)
+-            lineTo(center.x + arrowHalfWidth, center.y + arrowLength * 0.6f)
+-            lineTo(center.x, center.y + arrowLength * 0.6f - arrowIndent)
+-            lineTo(center.x - arrowHalfWidth, center.y + arrowLength * 0.6f)
+-            close()
+-        }
+-        drawPath(arrowPath, GarbyColors.TextPrimary.copy(alpha = fade))
+-        if (!stale) {
+-            frame.markers.forEach { marker ->
+-                if (marker.forwardCm * marker.forwardCm + marker.leftCm * marker.leftCm > limit * limit) return@forEach
+-                val at = toCanvas(marker.forwardCm.toFloat(), marker.leftCm.toFloat(), pxPerCm)
+-                when (marker.kind) {
+-                    MarkerKind.Object -> {
+-                        val half = 6.dp.toPx()
+-                        drawRect(ObjectOrange, Offset(at.x - half, at.y - half), Size(2f * half, 2f * half))
+-                        drawRect(
+-                            Color.White, Offset(at.x - half, at.y - half), Size(2f * half, 2f * half),
+-                            style = Stroke(1.dp.toPx())
++            .drawWithCache {
++                val center = Offset(size.width / 2f, size.height / 2f)
++                val radius = size.minDimension / 2f - 6.dp.toPx()
++                val pxPerCm = radius / (rangeM * 100f)
++                val fade = if (stale) 0.35f else 1f
++                val dash = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 6.dp.toPx()))
++                val limit = rangeM * 100
++                // Build scan geometry once per frame, range or display size; redraws reuse it.
++                val points = buildList {
++                    for (degree in 0 until 360) {
++                        val cm = frame.distancesCm[degree]
++                        if (cm <= 0 || cm > limit) continue
++                        val (forward, left) = mapPointCm(degree, cm)
++                        add(Offset(center.x - left * pxPerCm, center.y - forward * pxPerCm))
++                    }
++                }
++                val arrowLength = 11.dp.toPx()
++                val arrowHalfWidth = 6.5.dp.toPx()
++                val arrowIndent = 2.5.dp.toPx()
++                val arrowPath = Path().apply {
++                    moveTo(center.x, center.y - arrowLength)
++                    lineTo(center.x + arrowHalfWidth, center.y + arrowLength * 0.6f)
++                    lineTo(center.x, center.y + arrowLength * 0.6f - arrowIndent)
++                    lineTo(center.x - arrowHalfWidth, center.y + arrowLength * 0.6f)
++                    close()
++                }
++                onDrawBehind {
++                    drawCircle(Color(0xFF07130C), radius, center)
++                    for (metre in 1..rangeM) {
++                        if (rangeM > 4 && metre % 2 == 1) continue
++                        drawCircle(
++                            RadarRing, metre * 100f * pxPerCm, center,
++                            style = Stroke(1.dp.toPx(), pathEffect = if (metre == rangeM) null else dash)
+                         )
+                     }
+-                    else -> {
+-                        val color = if (marker.kind == MarkerKind.Person) PersonRed else MovingAmber
+-                        // Where it will be in one second.
+-                        val tip = toCanvas(
+-                            (marker.forwardCm + marker.vxCmS).toFloat(),
+-                            (marker.leftCm + marker.vyCmS).toFloat(), pxPerCm
+-                        )
+-                        drawLine(color, at, tip, strokeWidth = 2.5.dp.toPx(), cap = StrokeCap.Round)
+-                        val r = (if (marker.kind == MarkerKind.Person) 8 else 6).dp.toPx()
+-                        drawCircle(color, r, at)
+-                        drawCircle(Color.White, r, at, style = Stroke(1.5.dp.toPx()))
++                    drawLine(RadarRing, Offset(center.x, center.y - radius), Offset(center.x, center.y + radius), 1.dp.toPx())
++                    drawLine(RadarRing, Offset(center.x - radius, center.y), Offset(center.x + radius, center.y), 1.dp.toPx())
++                    drawPoints(points, PointMode.Points, RadarPoint.copy(alpha = fade),
++                        strokeWidth = 4.4.dp.toPx(), cap = StrokeCap.Round)
++                    drawPath(arrowPath, GarbyColors.TextPrimary.copy(alpha = fade))
++                    if (!stale) {
++                        frame.markers.forEach { marker ->
++                            if (marker.forwardCm.toLong() * marker.forwardCm + marker.leftCm.toLong() * marker.leftCm > limit.toLong() * limit) return@forEach
++                            val at = toCanvas(marker.forwardCm.toFloat(), marker.leftCm.toFloat(), pxPerCm)
++                            when (marker.kind) {
++                                MarkerKind.Object -> {
++                                    val half = 6.dp.toPx()
++                                    drawRect(ObjectOrange, Offset(at.x - half, at.y - half), Size(2f * half, 2f * half))
++                                    drawRect(
++                                        Color.White, Offset(at.x - half, at.y - half), Size(2f * half, 2f * half),
++                                        style = Stroke(1.dp.toPx())
++                                    )
++                                }
++                                else -> {
++                                    val color = if (marker.kind == MarkerKind.Person) PersonRed else MovingAmber
++                                    val tip = toCanvas(
++                                        (marker.forwardCm.toFloat() + marker.vxCmS),
++                                        (marker.leftCm.toFloat() + marker.vyCmS), pxPerCm
++                                    )
++                                    drawLine(color, at, tip, strokeWidth = 2.5.dp.toPx(), cap = StrokeCap.Round)
++                                    val r = (if (marker.kind == MarkerKind.Person) 8 else 6).dp.toPx()
++                                    drawCircle(color, r, at)
++                                    drawCircle(Color.White, r, at, style = Stroke(1.5.dp.toPx()))
++                                }
++                            }
++                        }
+                     }
+                 }
+             }
+-        }
+-    }
++    )
+ }
+ 
+ /** Robot frame to canvas: forward is up, the robot's left is the screen's left. */
+--- a/app/src/main/java/com/thesis/garby/OperatorViewModel.kt
++++ b/app/src/main/java/com/thesis/garby/OperatorViewModel.kt
+@@ -7,6 +7,7 @@
+ import com.thesis.garby.network.NetworkConnectivityManager
+ import com.thesis.garby.performance.GarbyDispatchers
+ import com.thesis.garby.realtime.GarbyRealtimeDb
++import com.thesis.garby.realtime.ConnectionState
+ import com.thesis.garby.realtime.MapFrame
+ import com.thesis.garby.realtime.MapLease
+ import com.thesis.garby.realtime.OperatorAction
+@@ -17,15 +18,18 @@
+ import com.thesis.garby.realtime.OperatorSubmission
+ import com.thesis.garby.realtime.RtdbConstants
+ import com.thesis.garby.realtime.operatorBlockReason
++import com.thesis.garby.realtime.observeMapSession
+ import kotlin.time.Duration.Companion.milliseconds
+ import kotlinx.coroutines.CancellationException
+ import kotlinx.coroutines.Job
++import kotlinx.coroutines.awaitCancellation
+ import kotlinx.coroutines.coroutineScope
+ import kotlinx.coroutines.delay
+ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.flow.StateFlow
+ import kotlinx.coroutines.flow.asStateFlow
+ import kotlinx.coroutines.flow.catch
++import kotlinx.coroutines.flow.collectLatest
+ import kotlinx.coroutines.flow.update
+ import kotlinx.coroutines.launch
+ 
+@@ -37,8 +41,11 @@
+     val command: OperatorCommand? = null,
+     val frame: MapFrame? = null,
+     val frameLoaded: Boolean = false,
++    val mapSleeping: Boolean = false,
++    val mapError: String? = null,
+     val nowMs: Long = System.currentTimeMillis(),
+     val online: Boolean = true,
++    val cloudConnected: Boolean = false,
+     val sending: OperatorAction? = null,
+     val notice: String? = null,
+     /** This phone's account ID: what the owner adds to the robot's operator list. */
+@@ -59,6 +66,12 @@
+ 
+     /** Status, last request and a clock, for as long as the app is on screen. */
+     suspend fun observeWhileVisible() = coroutineScope {
++        _uiState.update { it.copy(cloudConnected = false, nowMs = now()) }
++        launch(GarbyDispatchers.background) {
++            GarbyRealtimeDb.connectionState.collect { connection ->
++                _uiState.update { it.copy(cloudConnected = connection is ConnectionState.Connected) }
++            }
++        }
+         launch(GarbyDispatchers.background) {
+             OperatorDb.operatorStatus(deviceId)
+                 .catch { error ->
+@@ -92,30 +105,47 @@
+         }
+     }
+ 
+-    /** The map: hold a lease so the Pi publishes, and collect its frames. */
+-    suspend fun observeMapWhileVisible() = coroutineScope {
+-        launch(GarbyDispatchers.background) {
+-            while (true) {
+-                val uid = FirebaseAuth.getInstance().currentUser?.uid
+-                val lease = if (uid.isNullOrBlank()) MapLease.Failed else OperatorDb.renewMapLease(deviceId, uid)
+-                // A failed write says nothing about the list; keep the last answer.
+-                if (lease != MapLease.Failed) {
+-                    _uiState.update { it.copy(mapRefused = lease == MapLease.NotAnOperator) }
++    /** Full scans are retained only while visible and receiving updates. */
++    suspend fun observeMapWhileVisible(): Unit = try {
++        coroutineScope {
++            launch(GarbyDispatchers.background) {
++                GarbyRealtimeDb.connectionState.collectLatest { connection ->
++                    if (connection is ConnectionState.Connected) {
++                        while (true) {
++                            val uid = FirebaseAuth.getInstance().currentUser?.uid
++                            val lease = if (uid.isNullOrBlank()) MapLease.Failed else OperatorDb.renewMapLease(deviceId, uid)
++                            // A failed write says nothing about the list; keep the last answer.
++                            if (lease != MapLease.Failed) {
++                                _uiState.update { it.copy(mapRefused = lease == MapLease.NotAnOperator) }
++                            }
++                            delay(OperatorLimits.MAP_LEASE_RENEW_MS.milliseconds)
++                        }
++                    }
+                 }
+-                delay(OperatorLimits.MAP_LEASE_RENEW_MS.milliseconds)
++            }
++            launch(GarbyDispatchers.background) {
++                observeMapSession(
++                    frames = { OperatorDb.mapFrame(deviceId) },
++                    timestamps = { OperatorDb.mapTimestamp(deviceId) },
++                    nowMs = ::now,
++                    onFrame = { frame ->
++                        _uiState.update { it.copy(frame = frame, frameLoaded = true, mapSleeping = false, mapError = null, nowMs = now()) }
++                    },
++                    onSleep = {
++                        _uiState.update { it.copy(frame = null, frameLoaded = true, mapSleeping = true) }
++                    }
++                )
+             }
+         }
+-        launch(GarbyDispatchers.background) {
+-            OperatorDb.mapFrame(deviceId)
+-                .catch { error ->
+-                    if (error is CancellationException) throw error
+-                    Log.w(TAG, "Map stream failed", error)
+-                    emit(null)
+-                }
+-                .collect { frame ->
+-                    _uiState.update { it.copy(frame = frame ?: it.frame, frameLoaded = true, nowMs = now()) }
+-                }
+-        }
++    } catch (error: CancellationException) {
++        throw error
++    } catch (error: Exception) {
++        Log.w(TAG, "Map stream failed", error)
++        _uiState.update { it.copy(frame = null, frameLoaded = true, mapSleeping = true,
++            mapError = "Map connection unavailable") }
++        awaitCancellation()  // leave a static placeholder until the tab is opened again
++    } finally {
++        _uiState.update { it.copy(frame = null, frameLoaded = false, mapSleeping = false, mapError = null) }
+     }
+ 
+     /** Send [action] after rechecking the gate with the newest state. */
+@@ -124,7 +154,8 @@
+         val state = _uiState.value
+         val blocked = operatorBlockReason(
+             action, state.status, now(), NetworkConnectivityManager.isNetworkConnected(),
+-            busy = state.sending != null && action != OperatorAction.Estop
++            busy = state.sending != null && action != OperatorAction.Estop,
++            cloudConnected = state.cloudConnected
+         )
+         val uid = FirebaseAuth.getInstance().currentUser?.uid?.takeIf { it.isNotBlank() }
+         if (blocked != null || uid == null) {
+--- a/app/src/main/java/com/thesis/garby/ReturnScreen.kt
++++ b/app/src/main/java/com/thesis/garby/ReturnScreen.kt
+@@ -70,7 +70,6 @@
+ import com.thesis.garby.ui.glass.GlassButton
+ import com.thesis.garby.ui.glass.GlassButtonStyle
+ import com.thesis.garby.ui.glass.GlassDialog
+-import com.thesis.garby.ui.glass.GlassDock
+ import com.thesis.garby.ui.glass.GlassIconButton
+ import com.thesis.garby.ui.glass.GlassPanel
+ import com.thesis.garby.ui.glass.GlassScaffold
+@@ -120,11 +119,11 @@
+     onSend: () -> Unit,
+     onDismissNotice: () -> Unit
+ ) {
+-    val robotUi = robotStateUi(state.status?.robotState, state.status?.isReadyToReturn)
++    val robotUi = robotStateUi(state.status?.robotState, state.status?.isReadyToReturn, state.status?.location)
+     GlassScaffold(
+         topBar = {
+             GlassTopBar(
+-                title = "Return to base",
++                title = "Activity",
+                 subtitle = if (state.statusLoaded) robotUi.title else "Loading robot state…",
+                 subtitleColor = if (state.statusLoaded) robotUi.color else GarbyColors.TextMuted,
+                 navigationIcon = {
+@@ -135,8 +134,7 @@
+                     )
+                 }
+             )
+-        },
+-        bottomBar = { SendDock(state = state, onSend = onSend) }
++        }
+     ) { padding ->
+         val layoutDirection = LocalLayoutDirection.current
+         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+@@ -152,7 +150,26 @@
+                 ),
+                 verticalArrangement = Arrangement.spacedBy(12.dp)
+             ) {
++                state.status?.lastArrival?.let { arrival ->
++                    item(key = "last-arrival") {
++                        GlassPanel(modifier = Modifier.fillMaxWidth()) {
++                            Text(
++                                if (arrival.point == com.thesis.garby.realtime.RobotLocation.PointA)
++                                    "Last completed arrival: point A · Station"
++                                else "Last completed arrival: point B · Disposal area",
++                                style = MaterialTheme.typography.titleSmall,
++                                color = GarbyColors.TextPrimary
++                            )
++                            Text(
++                                "Confirmed ${formatAgo((state.nowMs - arrival.confirmedAtMs).coerceAtLeast(0L))}",
++                                style = MaterialTheme.typography.bodySmall,
++                                color = GarbyColors.TextMuted
++                            )
++                        }
++                    }
++                }
+                 item(key = "intro") { IntroCard() }
++                item(key = "send-return") { SendReturnCard(state = state, onSend = onSend) }
+                 state.notice?.let { notice ->
+                     item(key = "notice") { NoticeCard(notice, onDismissNotice) }
+                 }
+@@ -401,7 +418,7 @@
+ private val PHONE_SIDE_CHECKS = setOf(ReturnCheck.Internet, ReturnCheck.Cloud)
+ 
+ private fun checkDetail(check: ReturnCheck, state: ReturnUiState, status: DeviceStatus?): String = when (check) {
+-    ReturnCheck.AtDestination -> "Now: " + robotStateUi(status?.robotState, status?.isReadyToReturn).title
++    ReturnCheck.AtDestination -> "Now: " + robotStateUi(status?.robotState, status?.isReadyToReturn, status?.location).title
+     ReturnCheck.RobotOnline -> when (robotPresence(status, state.nowMs)) {
+         RobotPresence.Live -> "Seen ${formatAgo(state.nowMs - (status?.lastSeenMs ?: 0L))}"
+         RobotPresence.Stale -> "Last report ${formatAgo(state.nowMs - (status?.lastSeenMs ?: 0L))}"
+@@ -465,9 +482,9 @@
+ }
+ 
+ @Composable
+-private fun SendDock(state: ReturnUiState, onSend: () -> Unit) {
++private fun SendReturnCard(state: ReturnUiState, onSend: () -> Unit) {
+     val readiness = state.readiness
+-    GlassDock {
++    GlassPanel(modifier = Modifier.fillMaxWidth()) {
+         val caption = when {
+             state.submitting -> "Sending the request…"
+             readiness.canSend -> "All checks passed."
+@@ -480,6 +497,7 @@
+             color = if (readiness.canSend) GarbyColors.Ok else GarbyColors.TextSecondary,
+             modifier = Modifier.padding(horizontal = 6.dp)
+         )
++        Spacer(Modifier.height(10.dp))
+         GlassButton(
+             text = "Send back to base",
+             onClick = onSend,
+--- a/app/src/main/java/com/thesis/garby/realtime/GarbyRealtimeDb.kt
++++ b/app/src/main/java/com/thesis/garby/realtime/GarbyRealtimeDb.kt
+@@ -498,7 +498,15 @@
+             lidarHealthy = device?.child("lidarHealthy")?.getBooleanOrNull(),
+             sensorSerialConnected = device?.child("sensorSerialConnected")?.getBooleanOrNull(),
+             manualDisposalReady = device?.child("manualDisposalReady")?.getBooleanOrNull(),
+-            manualDisposalUpdatedAtMs = device?.child("manualDisposalUpdatedAt")?.getLongOrNull() ?: 0L
++            manualDisposalUpdatedAtMs = device?.child("manualDisposalUpdatedAt")?.getLongOrNull() ?: 0L,
++            location = RobotLocation.fromWire(device?.child("location")?.getStringOrNull()),
++            locationUpdatedAtMs = device?.child("locationUpdatedAt")?.getLongOrNull() ?: 0L,
++            lastArrival = device?.child("lastArrival")?.let { arrival ->
++                val point = RobotLocation.fromWire(arrival.child("point").getStringOrNull())
++                val at = arrival.child("confirmedAt").getLongOrNull() ?: 0L
++                if (point in listOf(RobotLocation.PointA, RobotLocation.PointB) && at > 0L)
++                    RouteArrival(checkNotNull(point), at) else null
++            }
+         )
+     }
+ 
+--- /dev/null
++++ b/app/src/main/java/com/thesis/garby/realtime/MapSession.kt
+@@ -0,0 +1,66 @@
++package com.thesis.garby.realtime
++
++import kotlinx.coroutines.cancelAndJoin
++import kotlinx.coroutines.channels.Channel
++import kotlinx.coroutines.coroutineScope
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.collect
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withTimeoutOrNull
++
++/**
++ * Keep only the current scan. After ten seconds without a new usable acquisition, detach the
++ * large frame listener and watch only its timestamp. A fresh timestamp wakes it automatically.
++ * The caller owns the small publication lease so a recovered Pi can still wake a sleeping map.
++ */
++suspend fun observeMapSession(
++    frames: () -> Flow<MapFrame?>,
++    timestamps: () -> Flow<Long>,
++    nowMs: () -> Long,
++    onFrame: (MapFrame) -> Unit,
++    onSleep: () -> Unit
++) {
++    var lastAt = 0L
++    var lastSeq = -1L
++    while (true) {
++        coroutineScope {
++            val updates = Channel<MapFrame>(Channel.CONFLATED)
++            val collector = launch {
++                var observedAt = lastAt
++                var observedSeq = lastSeq
++                try {
++                    frames().collect { frame ->
++                        if (frame != null && !frame.isStale(nowMs()) &&
++                            (frame.atMs != observedAt || frame.seq != observedSeq)
++                        ) {
++                            observedAt = frame.atMs
++                            observedSeq = frame.seq
++                            updates.send(frame)
++                        }
++                    }
++                } finally {
++                    updates.close()
++                }
++            }
++            try {
++                while (true) {
++                    val frame = withTimeoutOrNull(OperatorLimits.MAP_SLEEP_AFTER_MS) {
++                        updates.receiveCatching().getOrNull()
++                    } ?: break
++                    lastAt = frame.atMs
++                    lastSeq = frame.seq
++                    onFrame(frame)
++                }
++            } finally {
++                collector.cancelAndJoin()
++                updates.cancel()
++            }
++        }
++        onSleep()
++        timestamps().first { stamp ->
++            stamp > 0L && stamp != lastAt &&
++                nowMs() - stamp in -30_000L..OperatorLimits.MAP_STALE_AFTER_MS
++        }
++    }
++}
+--- a/app/src/main/java/com/thesis/garby/realtime/Models.kt
++++ b/app/src/main/java/com/thesis/garby/realtime/Models.kt
+@@ -36,6 +36,21 @@
+     }
+ }
+ 
++/** Current route endpoint as confirmed by executor completion telemetry. */
++enum class RobotLocation(val wire: String) {
++    PointA("POINT_A"), PointB("POINT_B"), InTransit("IN_TRANSIT"), Unknown("UNKNOWN");
++
++    companion object {
++        fun fromWire(value: String?): RobotLocation? =
++            value?.takeIf { it.isNotBlank() }?.let { text ->
++                entries.firstOrNull { it.wire == text } ?: Unknown
++            }
++    }
++}
++
++/** The last endpoint confirmed by a completed executor route; retained while travelling. */
++data class RouteArrival(val point: RobotLocation, val confirmedAtMs: Long)
++
+ /**
+  * The Pi's status record. Every field is nullable or zero when the Pi has not reported it, so
+  * the app never shows an invented value. Freshness is judged from [lastSeenMs] at display time.
+@@ -56,7 +71,10 @@
+     val sensorSerialConnected: Boolean? = null,
+     /** Fresh Pi + executor eligibility for threshold-free disposal, never motion permission. */
+     val manualDisposalReady: Boolean? = null,
+-    val manualDisposalUpdatedAtMs: Long = 0L
++    val manualDisposalUpdatedAtMs: Long = 0L,
++    val location: RobotLocation? = null,
++    val locationUpdatedAtMs: Long = 0L,
++    val lastArrival: RouteArrival? = null
+ )
+ 
+ /** Wire statuses of `devices/<id>/commands/reset`, written by the app (pending) and the Pi. */
+--- a/app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt
++++ b/app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt
+@@ -21,6 +21,7 @@
+ import kotlinx.coroutines.flow.Flow
+ import kotlinx.coroutines.flow.callbackFlow
+ import kotlinx.coroutines.flow.conflate
++import kotlinx.coroutines.flow.distinctUntilChanged
+ import kotlinx.coroutines.flow.flowOn
+ import kotlinx.coroutines.flow.map
+ import kotlinx.coroutines.suspendCancellableCoroutine
+@@ -153,6 +154,14 @@
+             .conflate().flowOn(GarbyDispatchers.background)
+     }
+ 
++    /** Sleeping maps retain only this scalar listener, rather than a decoded scan/snapshot. */
++    fun mapTimestamp(deviceId: String = RtdbConstants.DEFAULT_DEVICE_ID): Flow<Long> {
++        requireValid(deviceId)
++        return snapshots("devices/$deviceId/map/frame/at")
++            .map { (it.value as? Number)?.toLong() ?: 0L }
++            .distinctUntilChanged().flowOn(GarbyDispatchers.background)
++    }
++
+     private fun extractFrame(snapshot: DataSnapshot): MapFrame? {
+         if (!snapshot.exists() || snapshot.long("v") != 1L) return null
+         val distances = decodeDistances(snapshot.string("d")) ?: return null
+--- a/app/src/main/java/com/thesis/garby/realtime/OperatorModels.kt
++++ b/app/src/main/java/com/thesis/garby/realtime/OperatorModels.kt
+@@ -129,6 +129,9 @@
+     /** A map frame older than this is drawn greyed and labelled stale. */
+     const val MAP_STALE_AFTER_MS = 3_000L
+ 
++    /** Release scan data and its listener after ten seconds without a new valid scan. */
++    const val MAP_SLEEP_AFTER_MS = 10_000L
++
+     /** The Pi publishes while a lease is under 45 s old. */
+     const val MAP_LEASE_RENEW_MS = 20_000L
+ }
+@@ -140,23 +143,25 @@
+ private const val FUTURE_TOLERANCE_MS = 30_000L
+ 
+ /**
+- * Why [action] cannot be sent now, or null when it can. An emergency stop is never held back by
+- * the robot's reported state: with no fresh state it is still worth sending.
++ * Why [action] cannot be sent now, or null when it can. The phone's stop requires a reporting
++ * Pi and a live controller link; once online it can preempt any other pending action.
+  */
+ fun operatorBlockReason(
+     action: OperatorAction,
+     status: OperatorStatus?,
+     nowMs: Long,
+     online: Boolean,
+-    busy: Boolean
++    busy: Boolean,
++    cloudConnected: Boolean = true
+ ): String? {
+     if (!online) return "This phone is offline."
+-    if (busy) return "Another request is being sent."
+-    if (action == OperatorAction.Estop) return null
++    if (!cloudConnected) return "This phone is not connected to GARBY's database."
+     if (!status.isFresh(nowMs)) return "GARBY's Pi is not reporting. Is the robot software running?"
+     status!!
+     if (!status.connected) return "The Pi has no link to the robot's controllers."
+     if (!status.supported) return "Waiting for the controllers to report their state."
++    if (action == OperatorAction.Estop) return null
++    if (busy) return "Another request is being sent."
+     if (status.pending) return "The controllers are still confirming the last action."
+     return when (action) {
+         OperatorAction.Release ->
+--- a/app/src/main/java/com/thesis/garby/ui/BottomBar.kt
++++ b/app/src/main/java/com/thesis/garby/ui/BottomBar.kt
+@@ -72,11 +72,16 @@
+     Sending("SENDING STOP…", "Waiting for GARBY"),
+     Requested("STOP SENT", "Waiting for the controllers to confirm"),
+     Confirmed("STOPPED", "Confirmed by the controllers. Release it in Controls"),
+-    Offline("EMERGENCY STOP", "This phone is offline: use the robot's own stop")
++    Offline("EMERGENCY STOP", "This phone is offline"),
++    CloudUnavailable("EMERGENCY STOP", "Unavailable: this phone is disconnected from GARBY"),
++    PiUnavailable("EMERGENCY STOP", "Unavailable: Raspberry Pi is offline or not reporting"),
++    ControllersUnavailable("EMERGENCY STOP", "Unavailable: MCU is offline or not reporting");
++
++    val available: Boolean get() = this == Ready || this == Requested || this == Confirmed
+ }
+ 
+ /**
+- * The bar under every screen: an emergency stop that is always one tap away, and the four tabs.
++ * The bar under every screen: the phone stop is available while both Pi and MCU report online.
+  * The phone's stop travels over the internet. It is a convenience, not a safety device.
+  */
+ @Composable
+@@ -121,7 +126,8 @@
+ private fun StopButton(state: StopButtonState, onStop: () -> Unit) {
+     val confirmed = state == StopButtonState.Confirmed
+     val fill by animateColorAsState(
+-        if (confirmed) GarbyColors.CrimsonDeep else GarbyColors.Ember, label = "stopFill"
++        if (!state.available && state != StopButtonState.Sending) GarbyColors.Neutral
++        else if (confirmed) GarbyColors.CrimsonDeep else GarbyColors.Ember, label = "stopFill"
+     )
+     val shape = RoundedCornerShape(20.dp)
+     Row(
+@@ -131,7 +137,7 @@
+             .clip(shape)
+             .background(fill)
+             .border(1.dp, Color.White.copy(alpha = 0.35f), shape)
+-            .clickable(role = Role.Button, onClickLabel = "Emergency stop", onClick = onStop)
++            .clickable(enabled = state.available, role = Role.Button, onClickLabel = "Emergency stop", onClick = onStop)
+             .semantics { contentDescription = "${state.text}. ${state.detail}" }
+             .padding(horizontal = 16.dp, vertical = 8.dp),
+         verticalAlignment = Alignment.CenterVertically
+@@ -192,9 +198,14 @@
+     statusFresh: Boolean,
+     sendingStop: Boolean,
+     stopRequestOpen: Boolean,
+-    online: Boolean
++    online: Boolean,
++    controllersOnline: Boolean,
++    cloudConnected: Boolean
+ ): StopButtonState = when {
+     !online -> StopButtonState.Offline
++    !cloudConnected -> StopButtonState.CloudUnavailable
++    !statusFresh -> StopButtonState.PiUnavailable
++    !controllersOnline -> StopButtonState.ControllersUnavailable
+     sendingStop -> StopButtonState.Sending
+     statusFresh && emergencyStopped == true -> StopButtonState.Confirmed
+     stopRequestOpen -> StopButtonState.Requested
+--- a/app/src/main/java/com/thesis/garby/ui/StatusUi.kt
++++ b/app/src/main/java/com/thesis/garby/ui/StatusUi.kt
+@@ -14,6 +14,7 @@
+ import com.thesis.garby.realtime.ReturnCheck
+ import com.thesis.garby.realtime.ReturnStage
+ import com.thesis.garby.realtime.RobotState
++import com.thesis.garby.realtime.RobotLocation
+ import com.thesis.garby.realtime.Severity
+ import com.thesis.garby.ui.glass.RoutePosition
+ import com.thesis.garby.ui.theme.GarbyColors
+@@ -32,14 +33,25 @@
+  * Wording follows the robot's actual behaviour (README "What it does" and "Use"). A null state
+  * means the Pi does not publish one; its destination flag is then the only evidence.
+  */
+-fun robotStateUi(state: RobotState?, readyFlag: Boolean?): RobotStateUi = when (state) {
++fun robotStateUi(state: RobotState?, readyFlag: Boolean?, location: RobotLocation? = null): RobotStateUi = when (state) {
+     RobotState.Idle -> RobotStateUi(
+-        title = "Idle at base",
+-        description = "Starts a run on its own when the bin reaches 4 kg or the gas readings stay " +
+-            "dangerous, or when Start is pressed on the Pi monitor.",
++        title = when (location) {
++            RobotLocation.PointA -> "At point A · Station"
++            RobotLocation.PointB -> "At point B · Disposal area"
++            else -> "Idle · location unconfirmed"
++        },
++        description = when (location) {
++            RobotLocation.PointA -> "The return route is complete. GARBY is back at its station."
++            RobotLocation.PointB -> "GARBY is stopped at the disposal area."
++            else -> "GARBY is stopped. Idle alone does not confirm arrival at its station."
++        },
+         icon = Icons.Rounded.Home,
+         color = GarbyColors.Ok,
+-        route = RoutePosition.AtBase
++        route = when (location) {
++            RobotLocation.PointA -> RoutePosition.AtBase
++            RobotLocation.PointB -> RoutePosition.AtDestination
++            else -> RoutePosition.Stopped
++        }
+     )
+     RobotState.Outbound -> RobotStateUi(
+         title = "Driving to the collection point",
+@@ -51,7 +63,7 @@
+         moving = true
+     )
+     RobotState.AtDestination -> RobotStateUi(
+-        title = "Waiting at the collection point",
++        title = "At point B · Disposal area",
+         description = "Parked and stopped. Once the bin has been emptied, send GARBY back to base " +
+             "from this app.",
+         icon = Icons.Rounded.Flag,
+--- /dev/null
++++ b/app/src/test/java/com/thesis/garby/realtime/MapSessionTest.kt
+@@ -0,0 +1,146 @@
++package com.thesis.garby.realtime
++
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.cancelAndJoin
++import kotlinx.coroutines.flow.MutableSharedFlow
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.emitAll
++import kotlinx.coroutines.flow.flow
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.test.advanceTimeBy
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
++import org.junit.Assert.*
++import org.junit.Test
++
++@OptIn(ExperimentalCoroutinesApi::class)
++class MapSessionTest {
++    private val epoch = 1_800_000_000_000L
++    private fun frame(seq: Long, at: Long) =
++        MapFrame(seq, at, 100, IntArray(360), emptyList(), "", "", "", null, null, null)
++
++    @Test
++    fun idleMapDropsTheScanAndFullListenerAndWakesOnANewTimestamp() = runTest {
++        val frames = MutableSharedFlow<MapFrame?>(replay = 1)
++        val timestamps = MutableStateFlow(0L)
++        var fullListeners = 0
++        var timestampListeners = 0
++        var displayed: MapFrame? = null
++        var sleeping = false
++        val job = launch {
++            observeMapSession(
++                frames = { flow {
++                    fullListeners++
++                    try { emitAll(frames) } finally { fullListeners-- }
++                } },
++                timestamps = { flow {
++                    timestampListeners++
++                    try { emitAll(timestamps) } finally { timestampListeners-- }
++                } },
++                nowMs = { epoch + testScheduler.currentTime },
++                onFrame = { displayed = it; sleeping = false },
++                onSleep = { displayed = null; sleeping = true }
++            )
++        }
++        runCurrent()
++        frames.emit(frame(1, epoch))
++        runCurrent()
++        advanceTimeBy(9_999)
++        runCurrent()
++        assertNotNull(displayed)
++        assertFalse(sleeping)
++        advanceTimeBy(1)
++        runCurrent()
++        assertTrue(sleeping)
++        assertNull(displayed)
++        assertEquals(0, fullListeners)
++        assertEquals(1, timestampListeners)
++        timestamps.value = epoch - 60_000 // cached old data cannot wake the map
++        runCurrent()
++        assertEquals(0, fullListeners)
++        val recovered = frame(1, epoch + testScheduler.currentTime) // Pi seq may restart
++        frames.emit(recovered)
++        timestamps.value = recovered.atMs
++        runCurrent()
++        assertSame(recovered, displayed)
++        assertFalse(sleeping)
++        assertEquals(1, fullListeners)
++        assertEquals(0, timestampListeners)
++        job.cancelAndJoin()
++        assertEquals(0, fullListeners)
++        assertEquals(0, timestampListeners)
++    }
++
++    @Test
++    fun duplicateInvalidAndStaleFramesDoNotKeepTheMapAwake() = runTest {
++        val frames = MutableSharedFlow<MapFrame?>(replay = 1)
++        var sleeps = 0
++        var accepted = 0
++        val job = launch {
++            observeMapSession(
++                frames = { frames }, timestamps = { MutableStateFlow(0L) },
++                nowMs = { epoch + testScheduler.currentTime },
++                onFrame = { accepted++ }, onSleep = { sleeps++ }
++            )
++        }
++        runCurrent()
++        val first = frame(1, epoch)
++        frames.emit(first)
++        runCurrent()
++        advanceTimeBy(2_000)
++        frames.emit(first) // a duplicate while still fresh must not reset the timeout
++        runCurrent()
++        advanceTimeBy(3_000)
++        frames.emit(null)
++        frames.emit(frame(2, epoch - 60_000))
++        runCurrent()
++        advanceTimeBy(5_000)
++        runCurrent()
++        assertEquals(1, accepted)
++        assertEquals(1, sleeps)
++        job.cancelAndJoin()
++    }
++
++    @Test
++    fun tenSecondDeadlineRestartsOnlyForANewUsableScan() = runTest {
++        val frames = MutableSharedFlow<MapFrame?>(replay = 1)
++        var sleeping = false
++        val job = launch {
++            observeMapSession(
++                frames = { frames }, timestamps = { MutableStateFlow(0L) },
++                nowMs = { epoch + testScheduler.currentTime },
++                onFrame = { sleeping = false }, onSleep = { sleeping = true }
++            )
++        }
++        runCurrent()
++        frames.emit(frame(1, epoch))
++        runCurrent()
++        advanceTimeBy(9_000)
++        frames.emit(frame(2, epoch + testScheduler.currentTime))
++        runCurrent()
++        advanceTimeBy(9_999)
++        runCurrent()
++        assertFalse(sleeping)
++        advanceTimeBy(1)
++        runCurrent()
++        assertTrue(sleeping)
++        job.cancelAndJoin()
++    }
++
++    @Test
++    fun aMapThatHasNeverReceivedAScanAlsoSleeps() = runTest {
++        var sleeping = false
++        val job = launch {
++            observeMapSession(
++                frames = { MutableSharedFlow() }, timestamps = { MutableStateFlow(0L) },
++                nowMs = { epoch + testScheduler.currentTime },
++                onFrame = { fail("No frame was published") }, onSleep = { sleeping = true }
++            )
++        }
++        runCurrent()
++        advanceTimeBy(10_000)
++        runCurrent()
++        assertTrue(sleeping)
++        job.cancelAndJoin()
++    }
++}
+--- a/app/src/test/java/com/thesis/garby/realtime/OperatorModelsTest.kt
++++ b/app/src/test/java/com/thesis/garby/realtime/OperatorModelsTest.kt
+@@ -34,11 +34,15 @@
+         operatorBlockReason(action, status, now, online, busy)
+ 
+     @Test
+-    fun anEmergencyStopIsNeverHeldBackByTheRobotsState() {
+-        assertNull(block(OperatorAction.Estop, null))
+-        assertNull(block(OperatorAction.Estop, ready(ageMs = 600_000L)))
+-        assertNull(block(OperatorAction.Estop, ready().copy(connected = false, supported = false)))
++    fun emergencyStopNeedsBothPiAndMcuOnlineButPreemptsPendingActions() {
++        assertNotNull(block(OperatorAction.Estop, null))
++        assertNotNull(block(OperatorAction.Estop, ready(ageMs = 600_000L)))
++        assertNotNull(block(OperatorAction.Estop, ready().copy(connected = false)))
++        assertNotNull(block(OperatorAction.Estop, ready().copy(supported = false)))
+         assertNotNull(block(OperatorAction.Estop, ready(), online = false))
++        assertNull(block(OperatorAction.Estop, ready(pending = true), busy = true))
++        assertNotNull(operatorBlockReason(OperatorAction.Estop, ready(), now,
++            online = true, busy = false, cloudConnected = false))
+     }
+ 
+     @Test
+@@ -154,16 +158,22 @@
+ 
+     @Test
+     fun theStopButtonSaysWhatWasConfirmed() {
+-        fun state(stopped: Boolean?, fresh: Boolean = true, sending: Boolean = false, open: Boolean = false, online: Boolean = true) =
+-            stopButtonState(stopped, fresh, sending, open, online)
++        fun state(stopped: Boolean?, fresh: Boolean = true, sending: Boolean = false,
++            open: Boolean = false, online: Boolean = true, mcu: Boolean = true, cloud: Boolean = true) =
++            stopButtonState(stopped, fresh, sending, open, online, mcu, cloud)
+         assertEquals(StopButtonState.Ready, state(false))
+         assertEquals(StopButtonState.Sending, state(false, sending = true))
+         assertEquals(StopButtonState.Requested, state(false, open = true))
+         assertEquals(StopButtonState.Confirmed, state(true))
+-        // An old report of "stopped" is not a confirmation.
+-        assertEquals(StopButtonState.Ready, state(true, fresh = false))
+-        assertEquals(StopButtonState.Requested, state(null, fresh = false, open = true))
++        assertEquals(StopButtonState.PiUnavailable, state(true, fresh = false))
++        assertEquals(StopButtonState.PiUnavailable, state(null, fresh = false, open = true))
++        assertEquals(StopButtonState.ControllersUnavailable, state(true, mcu = false))
+         assertEquals(StopButtonState.Offline, state(true, online = false))
++        assertEquals(StopButtonState.CloudUnavailable, state(true, cloud = false))
++        assertFalse(state(true, fresh = false).available)
++        assertFalse(state(true, mcu = false).available)
++        assertFalse(state(true, cloud = false).available)
++        assertTrue(state(false).available)
+     }
+ 
+     // ---- map ------------------------------------------------------------------------------
+--- /dev/null
++++ b/app/src/test/java/com/thesis/garby/ui/RobotLocationTest.kt
+@@ -0,0 +1,29 @@
++package com.thesis.garby.ui
++
++import com.thesis.garby.realtime.RobotLocation
++import com.thesis.garby.realtime.RobotState
++import com.thesis.garby.ui.glass.RoutePosition
++import org.junit.Assert.*
++import org.junit.Test
++
++class RobotLocationTest {
++    @Test
++    fun genericIdleNeverClaimsStationArrival() {
++        assertEquals(RoutePosition.Stopped, robotStateUi(RobotState.Idle, false).route)
++        assertEquals(RoutePosition.Stopped,
++            robotStateUi(RobotState.Idle, false, RobotLocation.Unknown).route)
++        assertEquals(RoutePosition.AtBase,
++            robotStateUi(RobotState.Idle, false, RobotLocation.PointA).route)
++        assertEquals(RoutePosition.ToDestination,
++            robotStateUi(RobotState.Outbound, false, RobotLocation.PointA).route)
++    }
++
++    @Test
++    fun absentOrUnknownLocationCannotBecomePointA() {
++        assertNull(RobotLocation.fromWire(null))
++        assertEquals(RobotLocation.Unknown, RobotLocation.fromWire("OTHER"))
++        assertEquals(RobotLocation.PointA, RobotLocation.fromWire("POINT_A"))
++        assertEquals(RobotLocation.PointB, RobotLocation.fromWire("POINT_B"))
++        assertEquals(RobotLocation.InTransit, RobotLocation.fromWire("IN_TRANSIT"))
++    }
++}

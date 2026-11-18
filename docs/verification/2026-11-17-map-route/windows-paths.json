@@ -1,0 +1,14 @@
+{
+  "local.properties": {
+    "sha256": "9fe5602b099412976a02a1f66bb733f022df4777e903c9ca3e61c40ce5ddaf11",
+    "unchanged": true
+  },
+  "settings.gradle.kts": {
+    "sha256": "d772c595bf5f0d887a66bf5444778250200cdb92c4453eb6aa1e97066fa247a8",
+    "unchanged": true
+  },
+  "gradle.properties": {
+    "sha256": "e03e85114266d406aa5ee13f9e439481d74a722fe5c3b7464f3690616e9fa8c8",
+    "unchanged": true
+  }
+}

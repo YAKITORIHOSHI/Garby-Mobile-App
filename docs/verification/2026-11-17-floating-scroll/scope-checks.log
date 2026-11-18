@@ -1,0 +1,3 @@
+PASS: exactly two production changes: move scaffold padding inside verticalScroll in Map and Controls.
+PASS: Controls commands, confirmations, colors and all other code preserved after ignoring the two explanatory comments.
+PASS: 13 inspected navigation/dock/command/Windows build files unchanged.

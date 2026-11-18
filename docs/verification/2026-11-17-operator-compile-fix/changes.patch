@@ -1,0 +1,486 @@
+--- a/app/src/main/java/com/thesis/garby/OperatorViewModel.kt
++++ b/app/src/main/java/com/thesis/garby/OperatorViewModel.kt
+@@ -6,8 +6,8 @@
+ import com.google.firebase.auth.FirebaseAuth
+ import com.thesis.garby.network.NetworkConnectivityManager
+ import com.thesis.garby.performance.GarbyDispatchers
++import com.thesis.garby.realtime.ConnectionState
+ import com.thesis.garby.realtime.GarbyRealtimeDb
+-import com.thesis.garby.realtime.ConnectionState
+ import com.thesis.garby.realtime.MapFrame
+ import com.thesis.garby.realtime.MapLease
+ import com.thesis.garby.realtime.OperatorAction
+@@ -29,6 +29,7 @@
+ import kotlinx.coroutines.flow.StateFlow
+ import kotlinx.coroutines.flow.asStateFlow
+ import kotlinx.coroutines.flow.catch
++import kotlinx.coroutines.flow.collect
+ import kotlinx.coroutines.flow.collectLatest
+ import kotlinx.coroutines.flow.update
+ import kotlinx.coroutines.launch
+@@ -65,87 +66,101 @@
+     private var sendJob: Job? = null
+ 
+     /** Status, last request and a clock, for as long as the app is on screen. */
+-    suspend fun observeWhileVisible() = coroutineScope {
+-        _uiState.update { it.copy(cloudConnected = false, nowMs = now()) }
+-        launch(GarbyDispatchers.background) {
+-            GarbyRealtimeDb.connectionState.collect { connection ->
+-                _uiState.update { it.copy(cloudConnected = connection is ConnectionState.Connected) }
+-            }
+-        }
+-        launch(GarbyDispatchers.background) {
+-            OperatorDb.operatorStatus(deviceId)
+-                .catch { error ->
+-                    if (error is CancellationException) throw error
+-                    Log.w(TAG, "Operator status stream failed", error)
+-                    emit(null)
+-                }
+-                .collect { status ->
+-                    _uiState.update { it.copy(status = status, statusLoaded = true, nowMs = now()) }
+-                }
+-        }
+-        launch(GarbyDispatchers.background) {
+-            OperatorDb.operatorCommand(deviceId)
+-                .catch { error ->
+-                    if (error is CancellationException) throw error
+-                    Log.w(TAG, "Operator command stream failed", error)
+-                    emit(null)
+-                }
+-                .collect { command -> _uiState.update { it.copy(command = command, nowMs = now()) } }
+-        }
+-        launch {
+-            while (true) {
+-                _uiState.update {
+-                    it.copy(
+-                        nowMs = now(), online = NetworkConnectivityManager.isNetworkConnected(),
+-                        uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
++    suspend fun observeWhileVisible() {
++        coroutineScope {
++            _uiState.update { it.copy(cloudConnected = false, nowMs = now()) }
++            launch(GarbyDispatchers.background) {
++                GarbyRealtimeDb.connectionState.collect { connection: ConnectionState ->
++                    _uiState.update { it.copy(cloudConnected = connection is ConnectionState.Connected) }
++                }
++            }
++            launch(GarbyDispatchers.background) {
++                OperatorDb.operatorStatus(deviceId)
++                    .catch { error ->
++                        if (error is CancellationException) throw error
++                        Log.w(TAG, "Operator status stream failed", error)
++                        emit(null)
++                    }
++                    .collect { status: OperatorStatus? ->
++                        _uiState.update { it.copy(status = status, statusLoaded = true, nowMs = now()) }
++                    }
++            }
++            launch(GarbyDispatchers.background) {
++                OperatorDb.operatorCommand(deviceId)
++                    .catch { error ->
++                        if (error is CancellationException) throw error
++                        Log.w(TAG, "Operator command stream failed", error)
++                        emit(null)
++                    }
++                    .collect { command: OperatorCommand? ->
++                        _uiState.update { it.copy(command = command, nowMs = now()) }
++                    }
++            }
++            launch {
++                while (true) {
++                    _uiState.update {
++                        it.copy(
++                            nowMs = now(), online = NetworkConnectivityManager.isNetworkConnected(),
++                            uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
++                        )
++                    }
++                    delay(1_000L.milliseconds)
++                }
++            }
++        }
++    }
++
++    /** Full scans are retained only while visible and receiving updates. */
++    suspend fun observeMapWhileVisible() {
++        try {
++            coroutineScope {
++                launch(GarbyDispatchers.background) {
++                    GarbyRealtimeDb.connectionState.collectLatest { connection: ConnectionState ->
++                        if (connection is ConnectionState.Connected) {
++                            while (true) {
++                                val uid = FirebaseAuth.getInstance().currentUser?.uid
++                                val lease = if (uid.isNullOrBlank()) MapLease.Failed
++                                    else OperatorDb.renewMapLease(deviceId, uid)
++                                // A failed write says nothing about the list; keep the last answer.
++                                if (lease != MapLease.Failed) {
++                                    _uiState.update { it.copy(mapRefused = lease == MapLease.NotAnOperator) }
++                                }
++                                delay(OperatorLimits.MAP_LEASE_RENEW_MS.milliseconds)
++                            }
++                        }
++                    }
++                }
++                launch(GarbyDispatchers.background) {
++                    observeMapSession(
++                        frames = { OperatorDb.mapFrame(deviceId) },
++                        timestamps = { OperatorDb.mapTimestamp(deviceId) },
++                        nowMs = ::now,
++                        onFrame = { frame: MapFrame ->
++                            _uiState.update {
++                                it.copy(frame = frame, frameLoaded = true, mapSleeping = false,
++                                    mapError = null, nowMs = now())
++                            }
++                        },
++                        onSleep = {
++                            _uiState.update { it.copy(frame = null, frameLoaded = true, mapSleeping = true) }
++                        }
+                     )
+                 }
+-                delay(1_000L.milliseconds)
+-            }
+-        }
+-    }
+-
+-    /** Full scans are retained only while visible and receiving updates. */
+-    suspend fun observeMapWhileVisible(): Unit = try {
+-        coroutineScope {
+-            launch(GarbyDispatchers.background) {
+-                GarbyRealtimeDb.connectionState.collectLatest { connection ->
+-                    if (connection is ConnectionState.Connected) {
+-                        while (true) {
+-                            val uid = FirebaseAuth.getInstance().currentUser?.uid
+-                            val lease = if (uid.isNullOrBlank()) MapLease.Failed else OperatorDb.renewMapLease(deviceId, uid)
+-                            // A failed write says nothing about the list; keep the last answer.
+-                            if (lease != MapLease.Failed) {
+-                                _uiState.update { it.copy(mapRefused = lease == MapLease.NotAnOperator) }
+-                            }
+-                            delay(OperatorLimits.MAP_LEASE_RENEW_MS.milliseconds)
+-                        }
+-                    }
+-                }
+-            }
+-            launch(GarbyDispatchers.background) {
+-                observeMapSession(
+-                    frames = { OperatorDb.mapFrame(deviceId) },
+-                    timestamps = { OperatorDb.mapTimestamp(deviceId) },
+-                    nowMs = ::now,
+-                    onFrame = { frame ->
+-                        _uiState.update { it.copy(frame = frame, frameLoaded = true, mapSleeping = false, mapError = null, nowMs = now()) }
+-                    },
+-                    onSleep = {
+-                        _uiState.update { it.copy(frame = null, frameLoaded = true, mapSleeping = true) }
+-                    }
+-                )
+-            }
+-        }
+-    } catch (error: CancellationException) {
+-        throw error
+-    } catch (error: Exception) {
+-        Log.w(TAG, "Map stream failed", error)
+-        _uiState.update { it.copy(frame = null, frameLoaded = true, mapSleeping = true,
+-            mapError = "Map connection unavailable") }
+-        awaitCancellation()  // leave a static placeholder until the tab is opened again
+-    } finally {
+-        _uiState.update { it.copy(frame = null, frameLoaded = false, mapSleeping = false, mapError = null) }
++            }
++        } catch (error: CancellationException) {
++            throw error
++        } catch (error: Exception) {
++            Log.w(TAG, "Map stream failed", error)
++            _uiState.update {
++                it.copy(frame = null, frameLoaded = true, mapSleeping = true,
++                    mapError = "Map connection unavailable")
++            }
++            awaitCancellation() // Leave a static placeholder until the tab is opened again.
++        } finally {
++            _uiState.update {
++                it.copy(frame = null, frameLoaded = false, mapSleeping = false, mapError = null)
++            }
++        }
+     }
+ 
+     /** Send [action] after rechecking the gate with the newest state. */
+@@ -165,7 +180,12 @@
+         _uiState.update { it.copy(sending = action, notice = null) }
+         sendJob = viewModelScope.launch(GarbyDispatchers.background) {
+             try {
+-                val notice = when (val result = OperatorDb.send(deviceId, uid, action, sensors, fast)) {
++                val result = if (sensors == null && fast == null) {
++                    OperatorDb.send(deviceId, uid, action)
++                } else {
++                    OperatorDb.send(deviceId, uid, action, sensors = sensors, fast = fast)
++                }
++                val notice = when (result) {
+                     is OperatorSubmission.Sent -> null
+                     is OperatorSubmission.NotSent -> result.message
+                     is OperatorSubmission.Unconfirmed -> result.message
+--- a/app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt
++++ b/app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt
+@@ -17,15 +17,22 @@
+ import kotlin.time.Duration.Companion.milliseconds
+ import kotlinx.coroutines.CancellationException
+ import kotlinx.coroutines.TimeoutCancellationException
++import kotlinx.coroutines.cancelAndJoin
++import kotlinx.coroutines.channels.Channel
+ import kotlinx.coroutines.channels.awaitClose
++import kotlinx.coroutines.coroutineScope
+ import kotlinx.coroutines.flow.Flow
+ import kotlinx.coroutines.flow.callbackFlow
++import kotlinx.coroutines.flow.collect
+ import kotlinx.coroutines.flow.conflate
+ import kotlinx.coroutines.flow.distinctUntilChanged
+ import kotlinx.coroutines.flow.flowOn
++import kotlinx.coroutines.flow.first
+ import kotlinx.coroutines.flow.map
+ import kotlinx.coroutines.suspendCancellableCoroutine
++import kotlinx.coroutines.launch
+ import kotlinx.coroutines.withTimeout
++import kotlinx.coroutines.withTimeoutOrNull
+ 
+ /** What became of a request this phone tried to write. */
+ sealed interface OperatorSubmission {
+@@ -215,6 +222,10 @@
+         else -> MapLease.Failed
+     }
+ 
++    /** Keep the ordinary three-argument API alongside configured developer requests. */
++    suspend fun send(deviceId: String, uid: String, action: OperatorAction): OperatorSubmission =
++        send(deviceId, uid, action, sensors = null, fast = null)
++
+     /**
+      * Write one operator request. The transaction refuses to overwrite a request the Pi is still
+      * working on, except for an emergency stop, which always goes through.
+@@ -223,8 +234,8 @@
+         deviceId: String,
+         uid: String,
+         action: OperatorAction,
+-        sensors: Int? = null,
+-        fast: Boolean? = null
++        sensors: Int?,
++        fast: Boolean?
+     ): OperatorSubmission {
+         requireValid(deviceId)
+         require(uid.isNotBlank())
+@@ -292,3 +303,59 @@
+         }
+     }
+ }
++
++/**
++ * Keep only the current scan. After ten seconds without a new usable acquisition, detach the
++ * large frame listener and watch only its timestamp. A fresh timestamp wakes it automatically.
++ * The caller owns the small publication lease so a recovered Pi can still wake a sleeping map.
++ */
++suspend fun observeMapSession(
++    frames: () -> Flow<MapFrame?>,
++    timestamps: () -> Flow<Long>,
++    nowMs: () -> Long,
++    onFrame: (MapFrame) -> Unit,
++    onSleep: () -> Unit
++) {
++    var lastAt = 0L
++    var lastSeq = -1L
++    while (true) {
++        coroutineScope {
++            val updates = Channel<MapFrame>(Channel.CONFLATED)
++            val collector = launch {
++                var observedAt = lastAt
++                var observedSeq = lastSeq
++                try {
++                    frames().collect { frame ->
++                        if (frame != null && !frame.isStale(nowMs()) &&
++                            (frame.atMs != observedAt || frame.seq != observedSeq)
++                        ) {
++                            observedAt = frame.atMs
++                            observedSeq = frame.seq
++                            updates.send(frame)
++                        }
++                    }
++                } finally {
++                    updates.close()
++                }
++            }
++            try {
++                while (true) {
++                    val frame = withTimeoutOrNull(OperatorLimits.MAP_SLEEP_AFTER_MS) {
++                        updates.receiveCatching().getOrNull()
++                    } ?: break
++                    lastAt = frame.atMs
++                    lastSeq = frame.seq
++                    onFrame(frame)
++                }
++            } finally {
++                collector.cancelAndJoin()
++                updates.cancel()
++            }
++        }
++        onSleep()
++        timestamps().first { stamp ->
++            stamp > 0L && stamp != lastAt &&
++                nowMs() - stamp in -30_000L..OperatorLimits.MAP_STALE_AFTER_MS
++        }
++    }
++}
+--- a/app/src/main/java/com/thesis/garby/realtime/MapSession.kt
++++ /dev/null
+@@ -1,66 +0,0 @@
+-package com.thesis.garby.realtime
+-
+-import kotlinx.coroutines.cancelAndJoin
+-import kotlinx.coroutines.channels.Channel
+-import kotlinx.coroutines.coroutineScope
+-import kotlinx.coroutines.flow.Flow
+-import kotlinx.coroutines.flow.collect
+-import kotlinx.coroutines.flow.first
+-import kotlinx.coroutines.launch
+-import kotlinx.coroutines.withTimeoutOrNull
+-
+-/**
+- * Keep only the current scan. After ten seconds without a new usable acquisition, detach the
+- * large frame listener and watch only its timestamp. A fresh timestamp wakes it automatically.
+- * The caller owns the small publication lease so a recovered Pi can still wake a sleeping map.
+- */
+-suspend fun observeMapSession(
+-    frames: () -> Flow<MapFrame?>,
+-    timestamps: () -> Flow<Long>,
+-    nowMs: () -> Long,
+-    onFrame: (MapFrame) -> Unit,
+-    onSleep: () -> Unit
+-) {
+-    var lastAt = 0L
+-    var lastSeq = -1L
+-    while (true) {
+-        coroutineScope {
+-            val updates = Channel<MapFrame>(Channel.CONFLATED)
+-            val collector = launch {
+-                var observedAt = lastAt
+-                var observedSeq = lastSeq
+-                try {
+-                    frames().collect { frame ->
+-                        if (frame != null && !frame.isStale(nowMs()) &&
+-                            (frame.atMs != observedAt || frame.seq != observedSeq)
+-                        ) {
+-                            observedAt = frame.atMs
+-                            observedSeq = frame.seq
+-                            updates.send(frame)
+-                        }
+-                    }
+-                } finally {
+-                    updates.close()
+-                }
+-            }
+-            try {
+-                while (true) {
+-                    val frame = withTimeoutOrNull(OperatorLimits.MAP_SLEEP_AFTER_MS) {
+-                        updates.receiveCatching().getOrNull()
+-                    } ?: break
+-                    lastAt = frame.atMs
+-                    lastSeq = frame.seq
+-                    onFrame(frame)
+-                }
+-            } finally {
+-                collector.cancelAndJoin()
+-                updates.cancel()
+-            }
+-        }
+-        onSleep()
+-        timestamps().first { stamp ->
+-            stamp > 0L && stamp != lastAt &&
+-                nowMs() - stamp in -30_000L..OperatorLimits.MAP_STALE_AFTER_MS
+-        }
+-    }
+-}
+--- a/tools/static_quality_check.py
++++ b/tools/static_quality_check.py
+@@ -115,6 +115,25 @@
+         if marker not in text:
+             fail(f"Manual disposal invariant missing in {relative}: {marker}")
+ 
++# Keep the ViewModel and its database API together. A partial source update previously left
++# unresolved map helpers and a five-argument call against the old three-argument send method.
++operator_root = JAVA / "com/thesis/garby"
++operator_vm = (operator_root / "OperatorViewModel.kt").read_text(encoding="utf-8")
++operator_db = (operator_root / "realtime/OperatorDb.kt").read_text(encoding="utf-8")
++for name in ("observeWhileVisible", "observeMapWhileVisible"):
++    if not re.search(rf"suspend\s+fun\s+{name}\(\)\s*\{{", operator_vm):
++        fail(f"Operator observer {name} must use a Unit block body; a launch result is a Job")
++for label, pattern in {
++    "mapTimestamp": r"fun\s+mapTimestamp\([^)]*\)\s*:\s*Flow<Long>",
++    "ordinary send": r"suspend\s+fun\s+send\(\s*deviceId:\s*String,\s*uid:\s*String,\s*action:\s*OperatorAction\s*\)",
++    "configured send": r"suspend\s+fun\s+send\(\s*deviceId:\s*String,\s*uid:\s*String,\s*action:\s*OperatorAction,\s*sensors:\s*Int\?,\s*fast:\s*Boolean\?\s*\)",
++    "map session": r"suspend\s+fun\s+observeMapSession\(",
++}.items():
++    if not re.search(pattern, operator_db):
++        fail(f"OperatorDb {label} API missing; update it with OperatorViewModel.kt")
++if len(re.findall(r"suspend\s+fun\s+observeMapSession\(", source_text)) != 1:
++    fail("Exactly one observeMapSession definition is required; remove the superseded MapSession.kt")
++
+ # The published APK is the CI release build, always signed with the one persistent key:
+ # a different key forces every phone to uninstall the app before it can update.
+ WORKFLOW = ROOT / ".github/workflows/android.yml"
+--- a/PATCH_NOTES.md
++++ b/PATCH_NOTES.md
+@@ -1,4 +1,19 @@
+ # GARBY Mobile App - Patch Notes
++
++## Operator ViewModel compilation correction — 2026-11-17
++
++- Both lifecycle observers use Unit block bodies, preventing a last `launch` from becoming
++  the function's Job return value. Flow collection imports and callback types are explicit.
++- The map-session helper now lives in the existing `realtime/OperatorDb.kt`; the separate
++  `MapSession.kt` is removed. The same database file supplies `mapTimestamp`, an ordinary
++  three-argument `send`, and the five-argument configured developer `send`.
++- Update `OperatorViewModel.kt` and `OperatorDb.kt` together. The static checker detects old
++  companion files, absent map APIs and duplicate map-session definitions. A JVM API contract
++  test checks the actual observer return signatures and the consumer method references.
++- Static checks and negative source-contract checks passed. Gradle Kotlin compilation, JVM
++  tests and lint could not start on this host because Gradle is not cached and network sockets
++  are denied. Windows folder, SDK and build paths are unchanged. This app-only follow-up
++  requires no MCU upload; the previous Executor arrival change remains a separate requirement.
+ 
+ ## Compact map, Activity controls and route arrivals — 2026-11-17
+ 
+--- /dev/null
++++ b/app/src/test/java/com/thesis/garby/OperatorApiContractTest.kt
+@@ -0,0 +1,42 @@
++package com.thesis.garby
++
++import com.thesis.garby.realtime.MapFrame
++import com.thesis.garby.realtime.OperatorAction
++import com.thesis.garby.realtime.OperatorDb
++import com.thesis.garby.realtime.OperatorSubmission
++import com.thesis.garby.realtime.observeMapSession
++import java.lang.reflect.ParameterizedType
++import java.lang.reflect.WildcardType
++import kotlin.coroutines.Continuation
++import kotlinx.coroutines.flow.Flow
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotNull
++import org.junit.Test
++
++/** Compile the actual consumer signatures together; constructing a robot/Firebase client is unnecessary. */
++class OperatorApiContractTest {
++    @Test
++    fun lifecycleObserversReturnUnitRatherThanJob() {
++        for (name in listOf("observeWhileVisible", "observeMapWhileVisible")) {
++            val method = OperatorViewModel::class.java.getDeclaredMethod(name, Continuation::class.java)
++            val continuation = method.genericParameterTypes.last() as ParameterizedType
++            val result = continuation.actualTypeArguments.single() as WildcardType
++            assertEquals(name, Unit::class.java, result.lowerBounds.single())
++        }
++    }
++
++    @Test
++    fun databaseAndMapHelpersMatchTheViewModelsCalls() {
++        val ordinary: suspend (String, String, OperatorAction) -> OperatorSubmission = OperatorDb::send
++        val configured: suspend (String, String, OperatorAction, Int?, Boolean?) -> OperatorSubmission =
++            OperatorDb::send
++        val timestamps: (String) -> Flow<Long> = OperatorDb::mapTimestamp
++        val session: suspend (
++            () -> Flow<MapFrame?>, () -> Flow<Long>, () -> Long, (MapFrame) -> Unit, () -> Unit
++        ) -> Unit = ::observeMapSession
++        assertNotNull(ordinary)
++        assertNotNull(configured)
++        assertNotNull(timestamps)
++        assertNotNull(session)
++    }
++}

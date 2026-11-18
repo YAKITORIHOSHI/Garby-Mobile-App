@@ -1,7 +1,7 @@
 package com.thesis.garby
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -9,11 +9,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardReturn
 import androidx.compose.material.icons.automirrored.rounded.Login
@@ -48,108 +46,118 @@ import com.thesis.garby.ui.theme.GarbyTheme
 fun StartScreen(
     isAuthenticating: Boolean,
     errorMessage: String?,
-    onConnect: () -> Unit
+    onConnect: () -> Unit,
+    internetAvailable: Boolean = true
 ) {
     GlassScaffold(backdrop = Backdrop.Deep) { padding ->
-        BoxWithConstraints(
+        Box(
             Modifier
                 .fillMaxSize()
                 .padding(padding),
             contentAlignment = Alignment.TopCenter
         ) {
-            Column(
+            LazyColumn(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween,
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
                 modifier = Modifier
                     .widthCap()
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .heightIn(min = maxHeight)
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
+                    .fillMaxSize()
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Spacer(Modifier.height(24.dp))
-                    LogoBadge(size = 148.dp, ring = 4.dp)
-                    Spacer(Modifier.height(22.dp))
-                    Text(
-                        "GARBY",
-                        style = MaterialTheme.typography.displaySmall,
-                        color = GarbyColors.TextPrimary,
-                        modifier = Modifier.semantics { heading() }
-                    )
-                    Text(
-                        "Operator console",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = GarbyColors.Rose
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Your IoT-powered mobile waste robot",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = GarbyColors.TextSecondary,
-                        textAlign = TextAlign.Center
-                    )
+                item(key = "welcome") {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Spacer(Modifier.height(24.dp))
+                        LogoBadge(size = 148.dp, ring = 4.dp)
+                        Spacer(Modifier.height(22.dp))
+                        Text(
+                            "GARBY",
+                            style = MaterialTheme.typography.displaySmall,
+                            color = GarbyColors.TextPrimary,
+                            modifier = Modifier.semantics { heading() }
+                        )
+                        Text(
+                            "Operator console",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = GarbyColors.Rose
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Your IoT-powered mobile waste robot",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = GarbyColors.TextSecondary,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
 
-                GlassPanel(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 28.dp),
-                    shape = GlassShapes.Hero,
-                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)
-                ) {
-                    Feature(
-                        icon = Icons.Rounded.Sensors,
-                        title = "Live bin and air readings",
-                        text = "Weight, bin level and gas, marked stale when they get old."
-                    )
-                    Feature(
-                        icon = Icons.Rounded.Route,
-                        title = "Follow every run",
-                        text = "Where GARBY is between base and the collection point."
-                    )
-                    Feature(
-                        icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
-                        title = "Send it back to base",
-                        text = "Only while it is waiting at the collection point."
-                    )
+                item(key = "features") {
+                    GlassPanel(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 28.dp),
+                        shape = GlassShapes.Hero,
+                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)
+                    ) {
+                        Feature(
+                            icon = Icons.Rounded.Sensors,
+                            title = "Live bin and air readings",
+                            text = "Weight, bin level and gas, marked stale when they get old."
+                        )
+                        Feature(
+                            icon = Icons.Rounded.Route,
+                            title = "Follow every run",
+                            text = "Where GARBY is between base and the collection point."
+                        )
+                        Feature(
+                            icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
+                            title = "Send it back to base",
+                            text = "Only while it is waiting at the collection point."
+                        )
+                    }
                 }
 
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    if (!errorMessage.isNullOrBlank()) {
-                        GlassPanel(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 14.dp)
-                                .semantics { liveRegion = LiveRegionMode.Polite },
-                            glow = GarbyColors.Danger,
-                            contentPadding = PaddingValues(14.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconOrb(Icons.Rounded.ErrorOutline, GarbyColors.Danger, size = 32.dp)
-                                Spacer(Modifier.width(12.dp))
-                                Text(
-                                    errorMessage,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = GarbyColors.TextPrimary
-                                )
+                item(key = "connect") {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        if (!errorMessage.isNullOrBlank()) {
+                            GlassPanel(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 14.dp)
+                                    .semantics { liveRegion = LiveRegionMode.Polite },
+                                glow = GarbyColors.Danger,
+                                contentPadding = PaddingValues(14.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconOrb(Icons.Rounded.ErrorOutline, GarbyColors.Danger, size = 32.dp)
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        errorMessage,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = GarbyColors.TextPrimary
+                                    )
+                                }
                             }
                         }
+                        GlassButton(
+                            text = when {
+                                !internetAvailable -> "No internet connection"
+                                isAuthenticating -> "Connecting…"
+                                else -> "Connect to GARBY"
+                            },
+                            onClick = onConnect,
+                            enabled = internetAvailable,
+                            loading = isAuthenticating && internetAvailable,
+                            icon = Icons.AutoMirrored.Rounded.Login,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            "Signs in anonymously with Firebase. No password is stored on this phone.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = GarbyColors.TextMuted,
+                            textAlign = TextAlign.Center
+                        )
                     }
-                    GlassButton(
-                        text = if (isAuthenticating) "Connecting…" else "Connect to GARBY",
-                        onClick = onConnect,
-                        loading = isAuthenticating,
-                        icon = Icons.AutoMirrored.Rounded.Login,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        "Signs in anonymously with Firebase. No password is stored on this phone.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = GarbyColors.TextMuted,
-                        textAlign = TextAlign.Center
-                    )
                 }
             }
         }

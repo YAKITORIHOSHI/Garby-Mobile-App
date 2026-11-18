@@ -1,0 +1,11 @@
+{
+  "app/src/main/java/com/thesis/garby/OperatorViewModel.kt": "9df9d623200a3e84cfccd72f94120cea027b8686e57c7621c22f2b371e68f566",
+  "app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt": "250e9668cf3f0843ff52104892f0909c3195847a6016699326cb242124956f05",
+  "app/src/main/java/com/thesis/garby/realtime/MapSession.kt": "63c4ee814c1bc2bf20c35c7fbd2dcee91276e921757fdfad8b549fdf1a15adaa",
+  "app/src/main/java/com/thesis/garby/realtime/OperatorModels.kt": "229e93262e859af94ee908bbf57d1f08115c8cbdba33791ad1fa13604d6a07dc",
+  "tools/static_quality_check.py": "158d752cd5cac24cbc1268b26cc98f94dd8c82e82988a5ac4ec8c52200070ce4",
+  "PATCH_NOTES.md": "4bf10f99b7286addc047d42f3ea80efa308c5c3d752031319313ef68469b2c89",
+  "local.properties": "9fe5602b099412976a02a1f66bb733f022df4777e903c9ca3e61c40ce5ddaf11",
+  "settings.gradle.kts": "d772c595bf5f0d887a66bf5444778250200cdb92c4453eb6aa1e97066fa247a8",
+  "gradle.properties": "e03e85114266d406aa5ee13f9e439481d74a722fe5c3b7464f3690616e9fa8c8"
+}

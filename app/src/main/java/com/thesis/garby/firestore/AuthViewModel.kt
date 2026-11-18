@@ -9,6 +9,7 @@ import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.installations.FirebaseInstallations
 import com.thesis.garby.network.NetworkConnectivityManager
+import com.thesis.garby.network.watchSessionInternet
 import com.thesis.garby.performance.GarbyDispatchers
 import com.thesis.garby.realtime.GarbyRealtimeDb
 import kotlinx.coroutines.CancellationException
@@ -35,6 +36,7 @@ class AuthViewModel : ViewModel() {
     private companion object {
         const val TAG = "AuthViewModel"
         const val SIGN_IN_TIMEOUT_MS = 15_000L
+        const val OFFLINE_MESSAGE = "Internet connection lost. Your approved phone ID is kept. Reconnect to the internet, then press Connect."
     }
 
     private val firebaseAuth = FirebaseAuth.getInstance()
@@ -46,21 +48,32 @@ class AuthViewModel : ViewModel() {
 
     private val _isSigningIn = MutableStateFlow(false)
     val isSigningIn: StateFlow<Boolean> = _isSigningIn.asStateFlow()
+    val internetAvailable: StateFlow<Boolean> = NetworkConnectivityManager.isInternetAvailable
 
     private val _signInError = MutableStateFlow<String?>(null)
     val signInError: StateFlow<String?> = _signInError.asStateFlow()
 
     private var signInJob: Job? = null
+    private var offlineConfirmed = false
+    private var sessionClosed = false
+    private val sessionEndListeners = linkedSetOf<() -> Unit>()
 
     private val authStateListener = FirebaseAuth.AuthStateListener { auth ->
         val authenticated = auth.currentUser != null
         if (authenticated) {
+            // An asynchronous sign-in can finish after its waiting coroutine was cancelled.
+            if (offlineConfirmed || sessionClosed) {
+                _authState.value = AuthState.Unauthenticated
+                _isSigningIn.value = false
+                return@AuthStateListener
+            }
             _signInError.value = null
             publishMessagingInstallationId()
             // While signIn() is in flight, the coroutine drives the state
             // change so background RTDB warm-up completes before routing.
             if (_isSigningIn.value) return@AuthStateListener
         }
+        if (!authenticated && _authState.value is AuthState.Authenticated) clearSessionState()
         _authState.value = if (authenticated) {
             AuthState.Authenticated
         } else {
@@ -71,6 +84,32 @@ class AuthViewModel : ViewModel() {
 
     init {
         firebaseAuth.addAuthStateListener(authStateListener)
+        viewModelScope.launch {
+            watchSessionInternet(
+                internet = internetAvailable,
+                onOnline = {
+                    offlineConfirmed = false
+                    if (_signInError.value == OFFLINE_MESSAGE) _signInError.value = null
+                },
+                onOffline = {
+                    offlineConfirmed = true
+                    endSession(OFFLINE_MESSAGE, clearIdentity = false)
+                }
+            )
+        }
+    }
+
+    /** The authenticated UI registers its two activity-scoped workflow resets. */
+    fun addSessionEndListener(listener: () -> Unit) {
+        sessionEndListeners.add(listener)
+    }
+
+    fun removeSessionEndListener(listener: () -> Unit) {
+        sessionEndListeners.remove(listener)
+    }
+
+    private fun clearSessionState() {
+        sessionEndListeners.toList().forEach { it() }
     }
 
     /** FCM registers this app instance by its Firebase Installation ID; see the messaging service. */
@@ -85,12 +124,13 @@ class AuthViewModel : ViewModel() {
 
     fun signIn() {
         if (_isSigningIn.value) return
-        if (!NetworkConnectivityManager.isNetworkConnected() && firebaseAuth.currentUser == null) {
+        if (!internetAvailable.value || !NetworkConnectivityManager.isNetworkConnected()) {
             _signInError.value = "This phone is offline. Connect to the internet and try again."
             return
         }
         _signInError.value = null
         _isSigningIn.value = true
+        sessionClosed = false
 
         signInJob?.cancel()
         signInJob = viewModelScope.launch(GarbyDispatchers.background) {
@@ -126,7 +166,9 @@ class AuthViewModel : ViewModel() {
                 authenticated = false
             } finally {
                 withContext(Dispatchers.Main) {
-                    _authState.value = if (authenticated) {
+                    val canEnter = authenticated && !sessionClosed && !offlineConfirmed && internetAvailable.value
+                    _authState.value = if (canEnter) {
+                        publishMessagingInstallationId()
                         AuthState.Authenticated
                     } else {
                         AuthState.Unauthenticated
@@ -138,10 +180,18 @@ class AuthViewModel : ViewModel() {
     }
 
     fun signOut() {
+        endSession(null)
+    }
+
+    private fun endSession(message: String?, clearIdentity: Boolean = true) {
+        sessionClosed = true
         signInJob?.cancel()
-        _signInError.value = null
+        clearSessionState()
+        _signInError.value = message
         _isSigningIn.value = false
-        firebaseAuth.signOut()
+        _authState.value = AuthState.Unauthenticated
+        // An outage closes the app session but retains the operator-list identity.
+        if (clearIdentity) firebaseAuth.signOut()
     }
 
     override fun onCleared() {

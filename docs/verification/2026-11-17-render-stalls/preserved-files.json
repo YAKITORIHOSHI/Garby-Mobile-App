@@ -1,0 +1,57 @@
+[
+  {
+    "file": "local.properties",
+    "sha256": "9fe5602b099412976a02a1f66bb733f022df4777e903c9ca3e61c40ce5ddaf11",
+    "unchanged": true
+  },
+  {
+    "file": "settings.gradle.kts",
+    "sha256": "d772c595bf5f0d887a66bf5444778250200cdb92c4453eb6aa1e97066fa247a8",
+    "unchanged": true
+  },
+  {
+    "file": "build.gradle.kts",
+    "sha256": "94d33e12322991a5fc330628a3a465be0bc435b69adef75d976f0c0a80a76c8b",
+    "unchanged": true
+  },
+  {
+    "file": "app/build.gradle.kts",
+    "sha256": "8944027fdd4612e88d026eee6f7db87f46681467f795cde7ce0be71fe86b2aee",
+    "unchanged": true
+  },
+  {
+    "file": "gradle.properties",
+    "sha256": "e03e85114266d406aa5ee13f9e439481d74a722fe5c3b7464f3690616e9fa8c8",
+    "unchanged": true
+  },
+  {
+    "file": "gradle/libs.versions.toml",
+    "sha256": "888f550418a4436d4128ead51940b94f608c5aa6fc26bfc3b629c799d511f8a9",
+    "unchanged": true
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/ControlsScreen.kt",
+    "sha256": "39cab7657f2eacab78e6cd0e7292c7a4d1ce7532f82f0b27f11ac9a92007bb2b",
+    "unchanged": true
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/OperatorViewModel.kt",
+    "sha256": "636a80149d576c387d451d49244dd2ff8b5213fa64d7a959bdaa9e035aadd246",
+    "unchanged": true
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/realtime/OperatorDb.kt",
+    "sha256": "3c729abf8d14141ae111d1dde164d1d6d65d9552240c25c842acbcec33220483",
+    "unchanged": true
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/MapScreen.kt",
+    "sha256": "e75ce4dbb8e42ebc0b8528fdab87895a54c156d26020ae0d4a53542a7372f68a",
+    "unchanged": true
+  },
+  {
+    "file": "app/src/main/java/com/thesis/garby/ui/theme/Color.kt",
+    "sha256": "5d3ea70f173ede38e8243e9facb2a1058bc170a9fc4fd0c1d769fea1da092842",
+    "unchanged": true
+  }
+]

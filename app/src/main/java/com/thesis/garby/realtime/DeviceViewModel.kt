@@ -16,8 +16,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -222,10 +222,9 @@ class DeviceViewModel : ViewModel() {
 
     private fun startFreshnessTicker(scope: CoroutineScope) {
         scope.launch(GarbyDispatchers.background) {
-            while (isActive) {
-                delay(RtdbConstants.FRESHNESS_TICK_MS.milliseconds)
-                _uiState.update { it.recheckAll(System.currentTimeMillis()) }
-            }
+            GarbyRealtimeDb.monitoringTimeMs
+                .distinctUntilChangedBy { it / RtdbConstants.FRESHNESS_TICK_MS }
+                .collect { now -> _uiState.update { it.recheckAll(now) } }
         }
     }
 
